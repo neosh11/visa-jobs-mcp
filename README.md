@@ -1,5 +1,8 @@
 # visa-jobs-mcp
 
+<img width="775" height="663" alt="Screenshot 2026-02-20 at 10 20 22 am" src="https://github.com/user-attachments/assets/2223a577-eafe-41be-8076-3e017d043c55" />
+
+
 MCP server for finding visa-friendly jobs using an area-first search strategy:
 1. scrape jobs by location from LinkedIn with JobSpy,
 2. match employers to your sponsorship dataset,
