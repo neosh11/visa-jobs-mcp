@@ -1,8 +1,29 @@
 from __future__ import annotations
 
 from .base_runtime import *  # noqa: F401,F403
+from .base_runtime import (
+    _JOB_DB_READY_PATHS,
+    _ensure_job_db,
+    _job_db_conn,
+    _job_db_path,
+    _parse_utc_iso,
+    _save_search_sessions,
+    _set_job_stage_in_conn,
+    _stable_json,
+    _upsert_job_in_conn,
+    _utcnow_iso,
+)
 
 def _migrate_job_management_from_json(path: str | None = None) -> dict[str, Any]:
+    load_saved_jobs = globals().get("_load_saved_jobs")
+    load_ignored_jobs = globals().get("_load_ignored_jobs")
+    normalize_saved_job = globals().get("_normalized_saved_job")
+    normalize_ignored_job = globals().get("_normalized_ignored_job")
+    if not callable(load_saved_jobs) or not callable(load_ignored_jobs):
+        raise NameError("Saved/ignored job store helpers are not available")
+    if not callable(normalize_saved_job) or not callable(normalize_ignored_job):
+        raise NameError("Saved/ignored job normalizers are not available")
+
     _ensure_job_db(path)
     with _job_db_conn(path) as conn:
         existing = conn.execute(
@@ -20,14 +41,14 @@ def _migrate_job_management_from_json(path: str | None = None) -> dict[str, Any]
 
         saved_jobs_migrated = 0
         ignored_jobs_migrated = 0
-        saved_store = _load_saved_jobs()
+        saved_store = load_saved_jobs()
         users = saved_store.get("users", {}) if isinstance(saved_store, dict) else {}
         if isinstance(users, dict):
             for uid, entry in users.items():
                 if not isinstance(entry, dict):
                     continue
                 for raw in entry.get("jobs", []):
-                    normalized = _normalized_saved_job(raw)
+                    normalized = normalize_saved_job(raw)
                     if not normalized:
                         continue
                     job_id = _upsert_job_in_conn(
@@ -50,14 +71,14 @@ def _migrate_job_management_from_json(path: str | None = None) -> dict[str, Any]
                     )
                     saved_jobs_migrated += 1
 
-        ignored_store = _load_ignored_jobs()
+        ignored_store = load_ignored_jobs()
         ignored_users = ignored_store.get("users", {}) if isinstance(ignored_store, dict) else {}
         if isinstance(ignored_users, dict):
             for uid, entry in ignored_users.items():
                 if not isinstance(entry, dict):
                     continue
                 for raw in entry.get("jobs", []):
-                    normalized = _normalized_ignored_job(raw)
+                    normalized = normalize_ignored_job(raw)
                     if not normalized:
                         continue
                     job_id = _upsert_job_in_conn(
@@ -372,5 +393,3 @@ def _scrape_jobs_with_backoff(
             time.sleep(sleep_for)
             elapsed_backoff_seconds += float(sleep_for)
             backoff_seconds = min(max_backoff, backoff_seconds * 2)
-
-
