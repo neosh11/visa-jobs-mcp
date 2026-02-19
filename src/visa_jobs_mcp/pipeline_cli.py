@@ -4,10 +4,10 @@ import argparse
 import json
 import os
 
-from .pipeline import (
-    DEFAULT_DOL_PERFORMANCE_URL,
-    default_dataset_path,
-    run_dol_pipeline,
+DEFAULT_OUTPUT_PATH = os.getenv("VISA_COMPANY_DATASET_PATH", "data/companies.csv")
+DEFAULT_DOL_PERFORMANCE_URL = os.getenv(
+    "VISA_DOL_PERFORMANCE_URL",
+    "https://www.dol.gov/agencies/eta/foreign-labor/performance",
 )
 
 
@@ -15,7 +15,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Run internal DOL data pipeline")
     parser.add_argument(
         "--output-path",
-        default=default_dataset_path(),
+        default=DEFAULT_OUTPUT_PATH,
     )
     parser.add_argument("--lca", default="", help="LCA disclosure file path or URL")
     parser.add_argument("--perm", default="", help="PERM disclosure file path or URL")
@@ -40,6 +40,8 @@ def main() -> None:
         help="Do not fail when validation checks find data quality errors",
     )
     args = parser.parse_args()
+
+    from .pipeline import run_dol_pipeline
 
     result = run_dol_pipeline(
         output_path=args.output_path,

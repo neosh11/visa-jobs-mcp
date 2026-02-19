@@ -2,10 +2,17 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 from pathlib import Path
 from typing import Any
 
-from . import server
+from .runtime_paths import resolve_runtime_dataset_path
+
+DEFAULT_DATASET_PATH = resolve_runtime_dataset_path()
+DEFAULT_DOL_MANIFEST_PATH = os.getenv(
+    "VISA_DOL_MANIFEST_PATH",
+    "data/pipeline/last_run.json",
+)
 
 
 def _check(name: str, ok: bool, detail: str) -> dict[str, Any]:
@@ -15,9 +22,11 @@ def _check(name: str, ok: bool, detail: str) -> dict[str, Any]:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Health checks for visa-jobs-mcp")
     parser.add_argument("--user-id", default="", help="Optional user id to validate profile readiness")
-    parser.add_argument("--dataset-path", default=server.DEFAULT_DATASET_PATH)
-    parser.add_argument("--manifest-path", default=server.DEFAULT_DOL_MANIFEST_PATH)
+    parser.add_argument("--dataset-path", default=DEFAULT_DATASET_PATH)
+    parser.add_argument("--manifest-path", default=DEFAULT_DOL_MANIFEST_PATH)
     args = parser.parse_args()
+
+    from . import server
 
     checks: list[dict[str, Any]] = []
 

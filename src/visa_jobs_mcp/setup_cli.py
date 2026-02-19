@@ -4,8 +4,6 @@ import argparse
 import json
 from typing import Any
 
-from . import server
-
 
 TRUE_VALUES = {"1", "true", "t", "yes", "y"}
 FALSE_VALUES = {"0", "false", "f", "no", "n"}
@@ -90,6 +88,8 @@ def main() -> None:
         help="Do not prompt for missing values",
     )
     args = parser.parse_args()
+
+    from . import server
 
     payload = _collect_inputs(args)
     pref_res = server.set_user_preferences(

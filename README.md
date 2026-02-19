@@ -34,12 +34,9 @@ Job ingestion source: vendored JobSpy snapshot in `third_party/jobspy` (preferre
 - `data/companies.csv`: canonical sponsorship dataset (headers normalized).
 - `third_party/jobspy`: vendored snapshot of upstream JobSpy source.
 
-## Prerequisites
-- Python `3.11+`
-- pip
-
 ## Homebrew install (recommended)
 For non-technical users, install via Homebrew.
+No Python or `pip` install is required.
 
 ```bash
 brew tap neosh11/visa-jobs-mcp
@@ -81,10 +78,18 @@ Build local release binaries:
 ./scripts/build_release_binaries.sh
 ```
 
+This uses PyInstaller `onedir` mode by default for faster startup/help times.
+
 If you need a fully clean PyInstaller rebuild:
 
 ```bash
 PYINSTALLER_CLEAN=1 ./scripts/build_release_binaries.sh
+```
+
+If you explicitly need single-file executables:
+
+```bash
+PYI_BUNDLE_MODE=onefile ./scripts/build_release_binaries.sh
 ```
 
 Push a release tag (builds binaries on GitHub Actions and publishes assets):
@@ -117,7 +122,11 @@ Update vendored JobSpy snapshot:
 scripts/refresh_jobspy_snapshot.sh --ref HEAD
 ```
 
-## Native setup (macOS)
+## Build from source (macOS)
+Prerequisites:
+- Python `3.11+`
+- pip
+
 ```bash
 cd /path/to/visa-jobs-mcp
 python3 -m venv .venv

@@ -12,14 +12,11 @@ from urllib.parse import urljoin, urlparse
 import pandas as pd
 import requests
 
-DEFAULT_CANONICAL_DATASET_PATH = "data/companies.csv"
+from .runtime_paths import DEFAULT_CANONICAL_DATASET_PATH, default_dataset_path as runtime_default_dataset_path
 
 
 def default_dataset_path() -> str:
-    explicit = os.getenv("VISA_COMPANY_DATASET_PATH")
-    if explicit:
-        return explicit
-    return DEFAULT_CANONICAL_DATASET_PATH
+    return runtime_default_dataset_path()
 
 
 DEFAULT_DOL_PERFORMANCE_URL = os.getenv(

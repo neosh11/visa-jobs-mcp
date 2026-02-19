@@ -18,7 +18,7 @@ dependencies = [
 ]
 
 [project.scripts]
-visa-jobs-mcp = "visa_jobs_mcp.server:main"
+visa-jobs-mcp = "visa_jobs_mcp.server_cli:main"
 visa-jobs-pipeline = "visa_jobs_mcp.pipeline_cli:main"
 visa-jobs-setup = "visa_jobs_mcp.setup_cli:main"
 visa-jobs-doctor = "visa_jobs_mcp.doctor_cli:main"

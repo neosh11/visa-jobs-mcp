@@ -13,6 +13,7 @@ data = tomllib.loads(Path('pyproject.toml').read_text(encoding='utf-8'))
 print(data['project']['version'])
 PY
 )}"
+PYI_BUNDLE_MODE="${PYI_BUNDLE_MODE:-onedir}"
 
 OS_NAME="$(uname -s | tr '[:upper:]' '[:lower:]')"
 ARCH="$(uname -m)"
@@ -44,6 +45,18 @@ elif [[ "$OS_NAME" == "linux" ]]; then
   else
     TLS_LIB_NAME="tls-client-x86.so"
   fi
+fi
+
+if [[ "$PYI_BUNDLE_MODE" != "onedir" && "$PYI_BUNDLE_MODE" != "onefile" ]]; then
+  echo "Unsupported PYI_BUNDLE_MODE: ${PYI_BUNDLE_MODE} (expected: onedir or onefile)" >&2
+  exit 1
+fi
+
+DEFAULT_DATASET_FILE="$ROOT_DIR/data/companies.csv"
+if [[ ! -f "$DEFAULT_DATASET_FILE" ]]; then
+  echo "Missing bundled dataset file: ${DEFAULT_DATASET_FILE}" >&2
+  echo "Run visa-jobs-pipeline or provide data/companies.csv before building release artifacts." >&2
+  exit 1
 fi
 
 BUILD_ROOT="$ROOT_DIR/build/pyinstaller"
@@ -99,6 +112,10 @@ build_entrypoint() {
   local exe_name="$1"
   local module_path="$2"
   local wrapper="$BUILD_ROOT/wrappers/${exe_name}.py"
+  local bundle_flag="--onedir"
+  if [[ "$PYI_BUNDLE_MODE" == "onefile" ]]; then
+    bundle_flag="--onefile"
+  fi
 
   cat > "$wrapper" <<PY
 from visa_jobs_mcp.${module_path} import main
@@ -110,11 +127,12 @@ PY
   "$PYTHON_BIN" -m PyInstaller \
     --noconfirm \
     "${PYINSTALLER_CLEAN_ARGS[@]}" \
-    --onefile \
+    "$bundle_flag" \
     --collect-all visa_jobs_mcp \
     --collect-all jobspy \
     --collect-submodules tls_client \
     --add-data "${TLS_DEP_DIR}/${TLS_LIB_NAME}:tls_client/dependencies" \
+    --add-data "${DEFAULT_DATASET_FILE}:data" \
     --name "$exe_name" \
     --distpath "$DIST_ROOT" \
     --workpath "$BUILD_ROOT/work-${exe_name}" \
@@ -122,7 +140,7 @@ PY
     "$wrapper"
 }
 
-build_entrypoint "visa-jobs-mcp" "server"
+build_entrypoint "visa-jobs-mcp" "server_cli"
 build_entrypoint "visa-jobs-pipeline" "pipeline_cli"
 build_entrypoint "visa-jobs-setup" "setup_cli"
 build_entrypoint "visa-jobs-doctor" "doctor_cli"
