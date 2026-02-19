@@ -28,7 +28,7 @@ Job ingestion source: vendored JobSpy snapshot in `third_party/jobspy` (preferre
 - `src/visa_jobs_mcp/pipeline_cli.py`: CLI entrypoint for the internal pipeline.
 - `src/visa_jobs_mcp/setup_cli.py`: interactive guided local setup CLI.
 - `src/visa_jobs_mcp/doctor_cli.py`: health-check CLI for local validation.
-- `Formula/visa-jobs-mcp.rb`: Homebrew formula for tap-based install.
+- `https://github.com/neosh11/homebrew-visa-jobs-mcp`: dedicated Homebrew tap repository.
 - `doc/spec.md`: concise product + technical spec.
 - `doc/internal-pipeline.md`: internal pipeline runbook.
 - `data/companies.csv`: canonical sponsorship dataset (headers normalized).
@@ -39,12 +39,19 @@ Job ingestion source: vendored JobSpy snapshot in `third_party/jobspy` (preferre
 - pip
 
 ## Homebrew install (recommended)
-For non-technical users, install via Homebrew:
+For non-technical users, install via Homebrew.
 
 ```bash
-brew tap <your-org>/visa-jobs-mcp
-brew install --HEAD visa-jobs-mcp
+brew tap neosh11/visa-jobs-mcp
+brew install neosh11/visa-jobs-mcp/visa-jobs-mcp
 ```
+
+Tap repository:
+- `https://github.com/neosh11/homebrew-visa-jobs-mcp`
+
+Note:
+- This tap is intended to install prebuilt binaries from GitHub releases.
+- If a release asset for your architecture is missing, install will fail until the release workflow finishes.
 
 Then run:
 ```bash
@@ -60,6 +67,29 @@ Health check:
 ```bash
 visa-jobs-doctor --user-id "<your-user-id>"
 ```
+
+Upgrade:
+```bash
+brew upgrade neosh11/visa-jobs-mcp/visa-jobs-mcp
+```
+
+## Maintainer packaging (binary releases)
+Build local release binaries:
+
+```bash
+./scripts/build_release_binaries.sh
+```
+
+Push a release tag (builds binaries on GitHub Actions and publishes assets):
+
+```bash
+./scripts/release_tag.sh 0.1
+```
+
+Automated macOS binary builds:
+- Workflow: `.github/workflows/build-release-binaries.yml`
+- Trigger by pushing a tag like `v0.1.1` (or via manual workflow dispatch).
+- The workflow builds macOS binaries for both `macos-13` (x86_64) and `macos-14` (arm64), then uploads them to the GitHub release.
 
 ## GitHub Pages
 This repo includes a simple product page at `index.html` for GitHub Pages.
