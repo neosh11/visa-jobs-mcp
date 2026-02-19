@@ -70,11 +70,6 @@ mkdir -p "$BUILD_ROOT/wrappers" "$DIST_ROOT" "$RELEASE_ROOT"
 "$PYTHON_BIN" -m pip install -e .
 "$PYTHON_BIN" -m pip install pyinstaller
 
-PYINSTALLER_CLEAN_ARGS=()
-if [[ "${PYINSTALLER_CLEAN:-0}" == "1" ]]; then
-  PYINSTALLER_CLEAN_ARGS+=(--clean)
-fi
-
 TLS_DEP_DIR="$("$PYTHON_BIN" - <<'PY'
 from pathlib import Path
 import tls_client
@@ -113,6 +108,7 @@ build_entrypoint() {
   local module_path="$2"
   local wrapper="$BUILD_ROOT/wrappers/${exe_name}.py"
   local bundle_flag="--onedir"
+  local -a pyinstaller_args
   if [[ "$PYI_BUNDLE_MODE" == "onefile" ]]; then
     bundle_flag="--onefile"
   fi
@@ -124,20 +120,25 @@ if __name__ == "__main__":
     main()
 PY
 
-  "$PYTHON_BIN" -m PyInstaller \
-    --noconfirm \
-    "${PYINSTALLER_CLEAN_ARGS[@]}" \
-    "$bundle_flag" \
-    --collect-all visa_jobs_mcp \
-    --collect-all jobspy \
-    --collect-submodules tls_client \
-    --add-data "${TLS_DEP_DIR}/${TLS_LIB_NAME}:tls_client/dependencies" \
-    --add-data "${DEFAULT_DATASET_FILE}:data" \
-    --name "$exe_name" \
-    --distpath "$DIST_ROOT" \
-    --workpath "$BUILD_ROOT/work-${exe_name}" \
-    --specpath "$BUILD_ROOT/spec" \
+  pyinstaller_args=(
+    --noconfirm
+    "$bundle_flag"
+    --collect-all visa_jobs_mcp
+    --collect-all jobspy
+    --collect-submodules tls_client
+    --add-data "${TLS_DEP_DIR}/${TLS_LIB_NAME}:tls_client/dependencies"
+    --add-data "${DEFAULT_DATASET_FILE}:data"
+    --name "$exe_name"
+    --distpath "$DIST_ROOT"
+    --workpath "$BUILD_ROOT/work-${exe_name}"
+    --specpath "$BUILD_ROOT/spec"
     "$wrapper"
+  )
+  if [[ "${PYINSTALLER_CLEAN:-0}" == "1" ]]; then
+    pyinstaller_args=(--clean "${pyinstaller_args[@]}")
+  fi
+
+  "$PYTHON_BIN" -m PyInstaller "${pyinstaller_args[@]}"
 }
 
 build_entrypoint "visa-jobs-mcp" "server_cli"
