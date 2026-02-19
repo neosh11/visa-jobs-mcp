@@ -16,6 +16,7 @@ def _isolated_search_session_store(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(server, "DEFAULT_SEARCH_SESSION_PATH", str(tmp_path / "search_sessions.json"))
     monkeypatch.setattr(server, "DEFAULT_SAVED_JOBS_PATH", str(tmp_path / "saved_jobs.json"))
     monkeypatch.setattr(server, "DEFAULT_IGNORED_JOBS_PATH", str(tmp_path / "ignored_jobs.json"))
+    monkeypatch.setattr(server, "DEFAULT_JOB_DB_PATH", str(tmp_path / "job_management.db"))
 
 
 def test_set_and_get_user_preferences(monkeypatch) -> None:
@@ -270,3 +271,5 @@ def test_get_user_readiness_includes_profile_counters(tmp_path: Path, monkeypatc
     assert readiness["readiness"]["memory_lines_count"] == 1
     assert readiness["readiness"]["saved_jobs_count"] == 1
     assert readiness["readiness"]["ignored_jobs_count"] == 1
+    assert readiness["readiness"]["job_stage_counts"]["saved"] >= 1
+    assert readiness["readiness"]["job_stage_counts"]["ignored"] >= 1

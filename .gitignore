@@ -9,6 +9,7 @@ dist/
 data/pipeline/
 data/raw/
 data/config/
+data/app/
 data/companies.csv
 temp/linkedin/
 temp/

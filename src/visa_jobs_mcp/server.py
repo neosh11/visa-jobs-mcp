@@ -5,7 +5,9 @@ import os
 import re
 import hashlib
 import time
+import sqlite3
 import uuid
+from contextlib import contextmanager
 from dataclasses import asdict, dataclass
 from datetime import datetime, timedelta, timezone
 from functools import lru_cache
@@ -91,11 +93,18 @@ DEFAULT_IGNORED_JOBS_PATH = os.getenv(
     "VISA_IGNORED_JOBS_PATH",
     "data/config/ignored_jobs.json",
 )
+DEFAULT_JOB_DB_PATH = os.getenv(
+    "VISA_JOB_DB_PATH",
+    "data/app/visa_jobs.db",
+)
 
 CAPABILITIES_SCHEMA_VERSION = "1.1.0"
 CONFIDENCE_MODEL_VERSION = "v1.1.0-rules"
 SUPPORTED_STRICTNESS_MODES = {"strict", "balanced"}
 SUPPORTED_WORK_MODES = {"remote", "hybrid", "onsite"}
+VALID_JOB_STAGES = {"new", "saved", "applied", "interview", "offer", "rejected", "ignored"}
+JOB_DB_MIGRATION_KEY = "json_saved_ignored_v1"
+_JOB_DB_READY_PATHS: set[str] = set()
 
 
 VISA_POSITIVE_PATTERNS = [
@@ -444,6 +453,562 @@ def _save_search_sessions(data: dict[str, Any], path: str | None = None) -> None
     store_file = Path(_search_session_store_path(path))
     store_file.parent.mkdir(parents=True, exist_ok=True)
     store_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
+def _job_db_path(path: str | None = None) -> str:
+    return path or DEFAULT_JOB_DB_PATH
+
+
+@contextmanager
+def _job_db_conn(path: str | None = None):
+    db_file = Path(_job_db_path(path))
+    db_file.parent.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(db_file)
+    try:
+        conn.row_factory = sqlite3.Row
+        conn.execute("PRAGMA foreign_keys = ON")
+        yield conn
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def _validate_job_stage(stage: str) -> str:
+    clean = stage.strip().lower()
+    if clean not in VALID_JOB_STAGES:
+        raise ValueError(f"stage must be one of {sorted(VALID_JOB_STAGES)}")
+    return clean
+
+
+def _ensure_job_db(path: str | None = None) -> None:
+    with _job_db_conn(path) as conn:
+        conn.executescript(
+            """
+            CREATE TABLE IF NOT EXISTS schema_migrations (
+              key TEXT PRIMARY KEY,
+              applied_at_utc TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS jobs (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              user_id TEXT NOT NULL,
+              result_id TEXT NOT NULL DEFAULT '',
+              job_url TEXT NOT NULL,
+              title TEXT NOT NULL DEFAULT '',
+              company TEXT NOT NULL DEFAULT '',
+              location TEXT NOT NULL DEFAULT '',
+              site TEXT NOT NULL DEFAULT '',
+              created_at_utc TEXT NOT NULL,
+              updated_at_utc TEXT NOT NULL,
+              UNIQUE(user_id, job_url)
+            );
+
+            CREATE TABLE IF NOT EXISTS job_applications (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              user_id TEXT NOT NULL,
+              job_id INTEGER NOT NULL,
+              stage TEXT NOT NULL,
+              applied_at_utc TEXT,
+              source_session_id TEXT NOT NULL DEFAULT '',
+              note TEXT NOT NULL DEFAULT '',
+              updated_at_utc TEXT NOT NULL,
+              UNIQUE(user_id, job_id),
+              FOREIGN KEY(job_id) REFERENCES jobs(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS job_events (
+              id INTEGER PRIMARY KEY AUTOINCREMENT,
+              user_id TEXT NOT NULL,
+              job_id INTEGER NOT NULL,
+              from_stage TEXT,
+              to_stage TEXT,
+              reason TEXT NOT NULL DEFAULT '',
+              note TEXT NOT NULL DEFAULT '',
+              created_at_utc TEXT NOT NULL,
+              FOREIGN KEY(job_id) REFERENCES jobs(id) ON DELETE CASCADE
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_jobs_user_id ON jobs(user_id);
+            CREATE INDEX IF NOT EXISTS idx_jobs_user_url ON jobs(user_id, job_url);
+            CREATE INDEX IF NOT EXISTS idx_apps_user_stage ON job_applications(user_id, stage, updated_at_utc);
+            CREATE INDEX IF NOT EXISTS idx_events_user_created ON job_events(user_id, created_at_utc);
+            """
+        )
+
+
+def _row_to_dict(row: sqlite3.Row | None) -> dict[str, Any] | None:
+    if row is None:
+        return None
+    return {key: row[key] for key in row.keys()}
+
+
+def _get_job_by_id_in_conn(conn: sqlite3.Connection, user_id: str, job_id: int) -> dict[str, Any] | None:
+    row = conn.execute(
+        """
+        SELECT id, user_id, result_id, job_url, title, company, location, site, created_at_utc, updated_at_utc
+        FROM jobs
+        WHERE user_id = ? AND id = ?
+        """,
+        (user_id, int(job_id)),
+    ).fetchone()
+    return _row_to_dict(row)
+
+
+def _get_job_by_url_in_conn(conn: sqlite3.Connection, user_id: str, job_url: str) -> dict[str, Any] | None:
+    row = conn.execute(
+        """
+        SELECT id, user_id, result_id, job_url, title, company, location, site, created_at_utc, updated_at_utc
+        FROM jobs
+        WHERE user_id = ? AND lower(job_url) = lower(?)
+        LIMIT 1
+        """,
+        (user_id, job_url.strip()),
+    ).fetchone()
+    return _row_to_dict(row)
+
+
+def _upsert_job_in_conn(
+    conn: sqlite3.Connection,
+    *,
+    user_id: str,
+    job_url: str,
+    title: str = "",
+    company: str = "",
+    location: str = "",
+    site: str = "",
+    result_id: str = "",
+) -> int:
+    uid = user_id.strip()
+    clean_url = job_url.strip()
+    if not uid:
+        raise ValueError("user_id is required")
+    if not clean_url:
+        raise ValueError("job_url is required")
+
+    now_utc = _utcnow_iso()
+    existing = conn.execute(
+        """
+        SELECT id, title, company, location, site, result_id
+        FROM jobs
+        WHERE user_id = ? AND lower(job_url) = lower(?)
+        LIMIT 1
+        """,
+        (uid, clean_url),
+    ).fetchone()
+    if existing:
+        existing_id = int(existing["id"])
+        merged_title = title.strip() or str(existing["title"] or "")
+        merged_company = company.strip() or str(existing["company"] or "")
+        merged_location = location.strip() or str(existing["location"] or "")
+        merged_site = site.strip() or str(existing["site"] or "")
+        merged_result_id = result_id.strip() or str(existing["result_id"] or "")
+        conn.execute(
+            """
+            UPDATE jobs
+            SET result_id = ?, title = ?, company = ?, location = ?, site = ?, updated_at_utc = ?
+            WHERE id = ?
+            """,
+            (
+                merged_result_id,
+                merged_title,
+                merged_company,
+                merged_location,
+                merged_site,
+                now_utc,
+                existing_id,
+            ),
+        )
+        return existing_id
+
+    cursor = conn.execute(
+        """
+        INSERT INTO jobs (user_id, result_id, job_url, title, company, location, site, created_at_utc, updated_at_utc)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            uid,
+            result_id.strip(),
+            clean_url,
+            title.strip(),
+            company.strip(),
+            location.strip(),
+            site.strip(),
+            now_utc,
+            now_utc,
+        ),
+    )
+    return int(cursor.lastrowid)
+
+
+def _set_job_stage_in_conn(
+    conn: sqlite3.Connection,
+    *,
+    user_id: str,
+    job_id: int,
+    stage: str,
+    note: str = "",
+    source_session_id: str = "",
+    applied_at_utc: str = "",
+    reason: str = "stage_update",
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    uid = user_id.strip()
+    if not uid:
+        raise ValueError("user_id is required")
+    clean_stage = _validate_job_stage(stage)
+    if job_id < 1:
+        raise ValueError("job_id must be a positive integer")
+
+    existing = conn.execute(
+        """
+        SELECT id, stage, applied_at_utc, source_session_id, note
+        FROM job_applications
+        WHERE user_id = ? AND job_id = ?
+        LIMIT 1
+        """,
+        (uid, int(job_id)),
+    ).fetchone()
+
+    prior_stage = str(existing["stage"]) if existing else None
+    prior_note = str(existing["note"] or "") if existing else ""
+    merged_note = prior_note
+    new_note = note.strip()
+    if new_note:
+        merged_note = f"{prior_note}\n{new_note}".strip() if prior_note else new_note
+
+    prior_applied_at = str(existing["applied_at_utc"] or "") if existing else ""
+    final_applied_at = prior_applied_at or None
+    if clean_stage == "applied":
+        explicit_applied_at = applied_at_utc.strip()
+        final_applied_at = explicit_applied_at or prior_applied_at or _utcnow_iso()
+
+    prior_source_session = str(existing["source_session_id"] or "") if existing else ""
+    final_source_session = source_session_id.strip() or prior_source_session
+    now_utc = _utcnow_iso()
+
+    conn.execute(
+        """
+        INSERT INTO job_applications (
+          user_id, job_id, stage, applied_at_utc, source_session_id, note, updated_at_utc
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(user_id, job_id) DO UPDATE SET
+          stage = excluded.stage,
+          applied_at_utc = COALESCE(excluded.applied_at_utc, job_applications.applied_at_utc),
+          source_session_id = CASE
+            WHEN excluded.source_session_id <> '' THEN excluded.source_session_id
+            ELSE job_applications.source_session_id
+          END,
+          note = excluded.note,
+          updated_at_utc = excluded.updated_at_utc
+        """,
+        (
+            uid,
+            int(job_id),
+            clean_stage,
+            final_applied_at,
+            final_source_session,
+            merged_note,
+            now_utc,
+        ),
+    )
+
+    conn.execute(
+        """
+        INSERT INTO job_events (user_id, job_id, from_stage, to_stage, reason, note, created_at_utc)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            uid,
+            int(job_id),
+            prior_stage,
+            clean_stage,
+            reason.strip() or "stage_update",
+            new_note,
+            now_utc,
+        ),
+    )
+
+    app_row = conn.execute(
+        """
+        SELECT id, user_id, job_id, stage, applied_at_utc, source_session_id, note, updated_at_utc
+        FROM job_applications
+        WHERE user_id = ? AND job_id = ?
+        LIMIT 1
+        """,
+        (uid, int(job_id)),
+    ).fetchone()
+    event_row = conn.execute(
+        """
+        SELECT id, user_id, job_id, from_stage, to_stage, reason, note, created_at_utc
+        FROM job_events
+        WHERE rowid = last_insert_rowid()
+        """
+    ).fetchone()
+    return _row_to_dict(app_row) or {}, _row_to_dict(event_row) or {}
+
+
+def _append_job_note_in_conn(
+    conn: sqlite3.Connection,
+    *,
+    user_id: str,
+    job_id: int,
+    note: str,
+) -> tuple[dict[str, Any], dict[str, Any]]:
+    clean_note = note.strip()
+    if not clean_note:
+        raise ValueError("note is required")
+
+    existing = conn.execute(
+        """
+        SELECT id, stage, note
+        FROM job_applications
+        WHERE user_id = ? AND job_id = ?
+        LIMIT 1
+        """,
+        (user_id, int(job_id)),
+    ).fetchone()
+    current_stage = str(existing["stage"]) if existing else "new"
+    if not existing:
+        _set_job_stage_in_conn(
+            conn,
+            user_id=user_id,
+            job_id=int(job_id),
+            stage="new",
+            reason="initialize_application",
+        )
+        existing_note = ""
+    else:
+        existing_note = str(existing["note"] or "")
+
+    merged_note = f"{existing_note}\n{clean_note}".strip() if existing_note else clean_note
+    now_utc = _utcnow_iso()
+    conn.execute(
+        """
+        UPDATE job_applications
+        SET note = ?, updated_at_utc = ?
+        WHERE user_id = ? AND job_id = ?
+        """,
+        (merged_note, now_utc, user_id, int(job_id)),
+    )
+    conn.execute(
+        """
+        INSERT INTO job_events (user_id, job_id, from_stage, to_stage, reason, note, created_at_utc)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            user_id,
+            int(job_id),
+            current_stage,
+            current_stage,
+            "note_added",
+            clean_note,
+            now_utc,
+        ),
+    )
+
+    app_row = conn.execute(
+        """
+        SELECT id, user_id, job_id, stage, applied_at_utc, source_session_id, note, updated_at_utc
+        FROM job_applications
+        WHERE user_id = ? AND job_id = ?
+        LIMIT 1
+        """,
+        (user_id, int(job_id)),
+    ).fetchone()
+    event_row = conn.execute(
+        """
+        SELECT id, user_id, job_id, from_stage, to_stage, reason, note, created_at_utc
+        FROM job_events
+        WHERE rowid = last_insert_rowid()
+        """
+    ).fetchone()
+    return _row_to_dict(app_row) or {}, _row_to_dict(event_row) or {}
+
+
+def _job_snapshot_in_conn(conn: sqlite3.Connection, user_id: str, job_id: int) -> dict[str, Any]:
+    row = conn.execute(
+        """
+        SELECT
+          j.id AS job_id,
+          j.user_id,
+          j.result_id,
+          j.job_url,
+          j.title,
+          j.company,
+          j.location,
+          j.site,
+          j.created_at_utc,
+          j.updated_at_utc,
+          COALESCE(ja.stage, 'new') AS stage,
+          ja.applied_at_utc,
+          COALESCE(ja.source_session_id, '') AS source_session_id,
+          COALESCE(ja.note, '') AS note,
+          ja.updated_at_utc AS stage_updated_at_utc
+        FROM jobs j
+        LEFT JOIN job_applications ja
+          ON ja.user_id = j.user_id AND ja.job_id = j.id
+        WHERE j.user_id = ? AND j.id = ?
+        LIMIT 1
+        """,
+        (user_id, int(job_id)),
+    ).fetchone()
+    snapshot = _row_to_dict(row)
+    if not snapshot:
+        raise ValueError("job record not found")
+    return snapshot
+
+
+def _resolve_job_management_target_in_conn(
+    conn: sqlite3.Connection,
+    *,
+    user_id: str,
+    job_id: int = 0,
+    job_url: str = "",
+    result_id: str = "",
+    session_id: str = "",
+    title: str = "",
+    company: str = "",
+    location: str = "",
+    site: str = "",
+) -> tuple[int, dict[str, Any]]:
+    uid = user_id.strip()
+    if not uid:
+        raise ValueError("user_id is required")
+
+    if int(job_id or 0) > 0:
+        existing = _get_job_by_id_in_conn(conn, uid, int(job_id))
+        if not existing:
+            raise ValueError(f"job_id={int(job_id)} not found for user_id='{uid}'")
+        return int(existing["id"]), existing
+
+    resolved = _resolve_job_reference(
+        user_id=uid,
+        job_url=job_url,
+        result_id=result_id,
+        session_id=session_id,
+    )
+    merged_title = title.strip() or str(resolved.get("title", "")).strip()
+    merged_company = company.strip() or str(resolved.get("company", "")).strip()
+    merged_location = location.strip() or str(resolved.get("location", "")).strip()
+    merged_site = site.strip() or str(resolved.get("site", "")).strip()
+    clean_url = str(resolved.get("job_url", "")).strip()
+    if not clean_url:
+        raise ValueError("job_url is required")
+
+    upserted_id = _upsert_job_in_conn(
+        conn,
+        user_id=uid,
+        job_url=clean_url,
+        title=merged_title,
+        company=merged_company,
+        location=merged_location,
+        site=merged_site,
+        result_id=str(resolved.get("result_id", "")).strip(),
+    )
+    job_record = _get_job_by_id_in_conn(conn, uid, upserted_id) or {}
+    return upserted_id, job_record
+
+
+def _migrate_job_management_from_json(path: str | None = None) -> dict[str, Any]:
+    _ensure_job_db(path)
+    with _job_db_conn(path) as conn:
+        existing = conn.execute(
+            "SELECT key, applied_at_utc FROM schema_migrations WHERE key = ? LIMIT 1",
+            (JOB_DB_MIGRATION_KEY,),
+        ).fetchone()
+        if existing:
+            return {
+                "already_migrated": True,
+                "migration_key": JOB_DB_MIGRATION_KEY,
+                "applied_at_utc": str(existing["applied_at_utc"]),
+                "saved_jobs_migrated": 0,
+                "ignored_jobs_migrated": 0,
+            }
+
+        saved_jobs_migrated = 0
+        ignored_jobs_migrated = 0
+        saved_store = _load_saved_jobs()
+        users = saved_store.get("users", {}) if isinstance(saved_store, dict) else {}
+        if isinstance(users, dict):
+            for uid, entry in users.items():
+                if not isinstance(entry, dict):
+                    continue
+                for raw in entry.get("jobs", []):
+                    normalized = _normalized_saved_job(raw)
+                    if not normalized:
+                        continue
+                    job_id = _upsert_job_in_conn(
+                        conn,
+                        user_id=uid,
+                        job_url=str(normalized.get("job_url", "")).strip(),
+                        title=str(normalized.get("title", "")).strip(),
+                        company=str(normalized.get("company", "")).strip(),
+                        location=str(normalized.get("location", "")).strip(),
+                        site=str(normalized.get("site", "")).strip(),
+                    )
+                    _set_job_stage_in_conn(
+                        conn,
+                        user_id=uid,
+                        job_id=job_id,
+                        stage="saved",
+                        note=str(normalized.get("note", "")).strip(),
+                        source_session_id=str(normalized.get("source_session_id", "")).strip(),
+                        reason="migration_saved_jobs",
+                    )
+                    saved_jobs_migrated += 1
+
+        ignored_store = _load_ignored_jobs()
+        ignored_users = ignored_store.get("users", {}) if isinstance(ignored_store, dict) else {}
+        if isinstance(ignored_users, dict):
+            for uid, entry in ignored_users.items():
+                if not isinstance(entry, dict):
+                    continue
+                for raw in entry.get("jobs", []):
+                    normalized = _normalized_ignored_job(raw)
+                    if not normalized:
+                        continue
+                    job_id = _upsert_job_in_conn(
+                        conn,
+                        user_id=uid,
+                        job_url=str(normalized.get("job_url", "")).strip(),
+                    )
+                    _set_job_stage_in_conn(
+                        conn,
+                        user_id=uid,
+                        job_id=job_id,
+                        stage="ignored",
+                        note=str(normalized.get("reason", "")).strip(),
+                        source_session_id=str(normalized.get("source", "")).strip(),
+                        reason="migration_ignored_jobs",
+                    )
+                    ignored_jobs_migrated += 1
+
+        now_utc = _utcnow_iso()
+        conn.execute(
+            "INSERT INTO schema_migrations (key, applied_at_utc) VALUES (?, ?)",
+            (JOB_DB_MIGRATION_KEY, now_utc),
+        )
+        return {
+            "already_migrated": False,
+            "migration_key": JOB_DB_MIGRATION_KEY,
+            "applied_at_utc": now_utc,
+            "saved_jobs_migrated": int(saved_jobs_migrated),
+            "ignored_jobs_migrated": int(ignored_jobs_migrated),
+        }
+
+
+def _ensure_job_management_ready(path: str | None = None) -> dict[str, Any]:
+    resolved = str(Path(_job_db_path(path)).expanduser().resolve())
+    if resolved in _JOB_DB_READY_PATHS:
+        return {"already_ready": True, "job_db_path": resolved}
+    _ensure_job_db(resolved)
+    migration = _migrate_job_management_from_json(resolved)
+    _JOB_DB_READY_PATHS.add(resolved)
+    return {
+        "already_ready": False,
+        "job_db_path": resolved,
+        "migration": migration,
+    }
 
 
 def _prune_search_sessions(
@@ -1533,12 +2098,16 @@ def get_mcp_capabilities() -> dict[str, Any]:
             "proxies_used": False,
             "free_forever": True,
             "license": "MIT",
+            "data_not_shared_or_sold": True,
+            "no_fake_reviews_or_bot_marketing": True,
+            "fresh_job_search_per_query": True,
             "supported_job_sites": sorted(SUPPORTED_SITES),
             "strict_user_visa_match": True,
             "strictness_modes_supported": sorted(SUPPORTED_STRICTNESS_MODES),
             "search_sessions_local_persistence": True,
             "saved_jobs_local_persistence": True,
             "ignored_jobs_local_persistence": True,
+            "first_class_job_management": True,
             "rate_limit_backoff_retries": True,
         },
         "required_before_search": {
@@ -1552,6 +2121,7 @@ def get_mcp_capabilities() -> dict[str, Any]:
             "max_scan_results": int(DEFAULT_MAX_SCAN_RESULTS),
             "strictness_mode": "strict",
             "dataset_stale_after_days": int(DEFAULT_DATASET_STALE_AFTER_DAYS),
+            "job_db_path": DEFAULT_JOB_DB_PATH,
             "rate_limit_retry_window_seconds": int(DEFAULT_RATE_LIMIT_RETRY_WINDOW_SECONDS),
             "rate_limit_initial_backoff_seconds": int(DEFAULT_RATE_LIMIT_INITIAL_BACKOFF_SECONDS),
             "rate_limit_max_backoff_seconds": int(DEFAULT_RATE_LIMIT_MAX_BACKOFF_SECONDS),
@@ -1579,6 +2149,12 @@ def get_mcp_capabilities() -> dict[str, Any]:
             },
             {"name": "list_ignored_jobs", "required_inputs": ["user_id"]},
             {"name": "unignore_job", "required_inputs": ["user_id", "ignored_job_id"]},
+            {"name": "mark_job_applied", "required_inputs": ["user_id"]},
+            {"name": "update_job_stage", "required_inputs": ["user_id", "stage"]},
+            {"name": "list_jobs_by_stage", "required_inputs": ["user_id", "stage"]},
+            {"name": "add_job_note", "required_inputs": ["user_id", "note"]},
+            {"name": "list_recent_job_events", "required_inputs": ["user_id"]},
+            {"name": "get_job_pipeline_summary", "required_inputs": ["user_id"]},
             {"name": "clear_search_session", "required_inputs": ["user_id"]},
             {"name": "export_user_data", "required_inputs": ["user_id"]},
             {"name": "delete_user_data", "required_inputs": ["user_id", "confirm"]},
@@ -1649,6 +2225,7 @@ def get_mcp_capabilities() -> dict[str, Any]:
             "search_session_store_default": DEFAULT_SEARCH_SESSION_PATH,
             "saved_jobs_default": DEFAULT_SAVED_JOBS_PATH,
             "ignored_jobs_default": DEFAULT_IGNORED_JOBS_PATH,
+            "job_management_db_default": DEFAULT_JOB_DB_PATH,
         },
     }
 
@@ -1825,6 +2402,22 @@ def get_user_readiness(
 
     ignored_jobs_entry = _get_ignored_jobs_entry(_load_ignored_jobs(), uid) or {}
     ignored_jobs_count = len(ignored_jobs_entry.get("jobs", []))
+    _ensure_job_management_ready()
+    stage_counts = {stage: 0 for stage in sorted(VALID_JOB_STAGES)}
+    with _job_db_conn() as conn:
+        stage_rows = conn.execute(
+            """
+            SELECT stage, COUNT(*) AS count
+            FROM job_applications
+            WHERE user_id = ?
+            GROUP BY stage
+            """,
+            (uid,),
+        ).fetchall()
+        for row in stage_rows:
+            stage_key = str(row["stage"]).strip().lower()
+            if stage_key in stage_counts:
+                stage_counts[stage_key] = int(row["count"])
 
     dataset_exists = os.path.exists(dataset_path)
     manifest_path_resolved = manifest_path.strip() or DEFAULT_DOL_MANIFEST_PATH
@@ -1858,6 +2451,8 @@ def get_user_readiness(
             "memory_lines_count": int(memory_lines_count),
             "saved_jobs_count": int(saved_jobs_count),
             "ignored_jobs_count": int(ignored_jobs_count),
+            "job_stage_counts": stage_counts,
+            "applied_jobs_count": int(stage_counts.get("applied", 0)),
         },
         "dataset_freshness": freshness,
         "paths": {
@@ -1867,6 +2462,7 @@ def get_user_readiness(
             "memory_blob_path": DEFAULT_USER_BLOB_PATH,
             "saved_jobs_path": DEFAULT_SAVED_JOBS_PATH,
             "ignored_jobs_path": DEFAULT_IGNORED_JOBS_PATH,
+            "job_db_path": DEFAULT_JOB_DB_PATH,
         },
         "next_actions": action_items,
     }
@@ -2254,12 +2850,38 @@ def save_job_for_later(
             saved["source_session_id"] = source_session_id.strip()
         saved["updated_at_utc"] = now_utc
         _save_saved_jobs(data)
+        _ensure_job_management_ready()
+        with _job_db_conn() as conn:
+            db_job_id = _upsert_job_in_conn(
+                conn,
+                user_id=uid,
+                job_url=clean_job_url,
+                title=saved.get("title", ""),
+                company=saved.get("company", ""),
+                location=saved.get("location", ""),
+                site=saved.get("site", ""),
+                result_id=str(resolved.get("result_id", "")).strip(),
+            )
+            application, _ = _set_job_stage_in_conn(
+                conn,
+                user_id=uid,
+                job_id=db_job_id,
+                stage="saved",
+                note=saved.get("note", ""),
+                source_session_id=saved.get("source_session_id", ""),
+                reason="save_job_for_later",
+            )
         return {
             "user_id": uid,
             "action": "updated_existing",
             "saved_job": saved,
             "resolved_result_id": str(resolved.get("result_id", "")).strip(),
             "total_saved_jobs": len(entry["jobs"]),
+            "job_management": {
+                "job_id": int(db_job_id),
+                "stage": str(application.get("stage", "saved")),
+                "job_db_path": DEFAULT_JOB_DB_PATH,
+            },
             "path": DEFAULT_SAVED_JOBS_PATH,
         }
 
@@ -2280,12 +2902,38 @@ def save_job_for_later(
     entry["next_id"] = saved_job_id + 1
     entry["updated_at_utc"] = now_utc
     _save_saved_jobs(data)
+    _ensure_job_management_ready()
+    with _job_db_conn() as conn:
+        db_job_id = _upsert_job_in_conn(
+            conn,
+            user_id=uid,
+            job_url=clean_job_url,
+            title=saved_job.get("title", ""),
+            company=saved_job.get("company", ""),
+            location=saved_job.get("location", ""),
+            site=saved_job.get("site", ""),
+            result_id=str(resolved.get("result_id", "")).strip(),
+        )
+        application, _ = _set_job_stage_in_conn(
+            conn,
+            user_id=uid,
+            job_id=db_job_id,
+            stage="saved",
+            note=saved_job.get("note", ""),
+            source_session_id=saved_job.get("source_session_id", ""),
+            reason="save_job_for_later",
+        )
     return {
         "user_id": uid,
         "action": "saved_new",
         "saved_job": saved_job,
         "resolved_result_id": str(resolved.get("result_id", "")).strip(),
         "total_saved_jobs": len(entry["jobs"]),
+        "job_management": {
+            "job_id": int(db_job_id),
+            "stage": str(application.get("stage", "saved")),
+            "job_db_path": DEFAULT_JOB_DB_PATH,
+        },
         "path": DEFAULT_SAVED_JOBS_PATH,
     }
 
@@ -2375,6 +3023,20 @@ def delete_saved_job(user_id: str, saved_job_id: int) -> dict[str, Any]:
     entry["jobs"] = remaining
     entry["updated_at_utc"] = _utcnow_iso()
     _save_saved_jobs(data)
+    _ensure_job_management_ready()
+    deleted_url = str(deleted_job.get("job_url", "")).strip() if deleted_job else ""
+    if deleted_url:
+        with _job_db_conn() as conn:
+            existing_job = _get_job_by_url_in_conn(conn, uid, deleted_url)
+            if existing_job:
+                _set_job_stage_in_conn(
+                    conn,
+                    user_id=uid,
+                    job_id=int(existing_job["id"]),
+                    stage="new",
+                    note="",
+                    reason="delete_saved_job",
+                )
     return {
         "user_id": uid,
         "saved_job_id": target_id,
@@ -2423,12 +3085,34 @@ def ignore_job(
             ignored["source"] = source.strip()
         ignored["updated_at_utc"] = now_utc
         _save_ignored_jobs(data)
+        _ensure_job_management_ready()
+        with _job_db_conn() as conn:
+            db_job_id = _upsert_job_in_conn(
+                conn,
+                user_id=uid,
+                job_url=clean_job_url,
+                result_id=str(resolved.get("result_id", "")).strip(),
+            )
+            application, _ = _set_job_stage_in_conn(
+                conn,
+                user_id=uid,
+                job_id=db_job_id,
+                stage="ignored",
+                note=ignored.get("reason", ""),
+                source_session_id=ignored.get("source", ""),
+                reason="ignore_job",
+            )
         return {
             "user_id": uid,
             "action": "updated_existing",
             "ignored_job": ignored,
             "resolved_result_id": str(resolved.get("result_id", "")).strip(),
             "total_ignored_jobs": len(entry["jobs"]),
+            "job_management": {
+                "job_id": int(db_job_id),
+                "stage": str(application.get("stage", "ignored")),
+                "job_db_path": DEFAULT_JOB_DB_PATH,
+            },
             "path": DEFAULT_IGNORED_JOBS_PATH,
         }
 
@@ -2445,12 +3129,34 @@ def ignore_job(
     entry["next_id"] = ignored_job_id + 1
     entry["updated_at_utc"] = now_utc
     _save_ignored_jobs(data)
+    _ensure_job_management_ready()
+    with _job_db_conn() as conn:
+        db_job_id = _upsert_job_in_conn(
+            conn,
+            user_id=uid,
+            job_url=clean_job_url,
+            result_id=str(resolved.get("result_id", "")).strip(),
+        )
+        application, _ = _set_job_stage_in_conn(
+            conn,
+            user_id=uid,
+            job_id=db_job_id,
+            stage="ignored",
+            note=ignored_job.get("reason", ""),
+            source_session_id=ignored_job.get("source", ""),
+            reason="ignore_job",
+        )
     return {
         "user_id": uid,
         "action": "ignored_new",
         "ignored_job": ignored_job,
         "resolved_result_id": str(resolved.get("result_id", "")).strip(),
         "total_ignored_jobs": len(entry["jobs"]),
+        "job_management": {
+            "job_id": int(db_job_id),
+            "stage": str(application.get("stage", "ignored")),
+            "job_db_path": DEFAULT_JOB_DB_PATH,
+        },
         "path": DEFAULT_IGNORED_JOBS_PATH,
     }
 
@@ -2540,6 +3246,20 @@ def unignore_job(user_id: str, ignored_job_id: int) -> dict[str, Any]:
     entry["jobs"] = remaining
     entry["updated_at_utc"] = _utcnow_iso()
     _save_ignored_jobs(data)
+    _ensure_job_management_ready()
+    deleted_url = str(deleted_job.get("job_url", "")).strip() if deleted_job else ""
+    if deleted_url:
+        with _job_db_conn() as conn:
+            existing_job = _get_job_by_url_in_conn(conn, uid, deleted_url)
+            if existing_job:
+                _set_job_stage_in_conn(
+                    conn,
+                    user_id=uid,
+                    job_id=int(existing_job["id"]),
+                    stage="new",
+                    note="",
+                    reason="unignore_job",
+                )
     return {
         "user_id": uid,
         "ignored_job_id": target_id,
@@ -2547,6 +3267,323 @@ def unignore_job(user_id: str, ignored_job_id: int) -> dict[str, Any]:
         "deleted_job": deleted_job,
         "total_ignored_jobs": len(remaining),
         "path": DEFAULT_IGNORED_JOBS_PATH,
+    }
+
+
+@mcp.tool()
+def mark_job_applied(
+    user_id: str,
+    job_id: int = 0,
+    job_url: str = "",
+    result_id: str = "",
+    session_id: str = "",
+    applied_at_utc: str = "",
+    note: str = "",
+) -> dict[str, Any]:
+    """Mark a job as applied and persist lifecycle state locally."""
+    uid = user_id.strip()
+    if not uid:
+        raise ValueError("user_id is required")
+    _ensure_job_management_ready()
+    source_session = session_id.strip()
+    if not source_session and ":" in result_id:
+        source_session = result_id.split(":", 1)[0].strip()
+
+    with _job_db_conn() as conn:
+        resolved_job_id, _ = _resolve_job_management_target_in_conn(
+            conn,
+            user_id=uid,
+            job_id=int(job_id or 0),
+            job_url=job_url,
+            result_id=result_id,
+            session_id=session_id,
+        )
+        application, event = _set_job_stage_in_conn(
+            conn,
+            user_id=uid,
+            job_id=resolved_job_id,
+            stage="applied",
+            note=note,
+            source_session_id=source_session,
+            applied_at_utc=applied_at_utc,
+            reason="mark_job_applied",
+        )
+        snapshot = _job_snapshot_in_conn(conn, uid, resolved_job_id)
+
+    return {
+        "user_id": uid,
+        "job": snapshot,
+        "application": application,
+        "event": event,
+        "job_db_path": DEFAULT_JOB_DB_PATH,
+    }
+
+
+@mcp.tool()
+def update_job_stage(
+    user_id: str,
+    stage: str,
+    job_id: int = 0,
+    job_url: str = "",
+    result_id: str = "",
+    session_id: str = "",
+    note: str = "",
+) -> dict[str, Any]:
+    """Update a job lifecycle stage (saved/applied/interview/offer/rejected/ignored/new)."""
+    uid = user_id.strip()
+    if not uid:
+        raise ValueError("user_id is required")
+    clean_stage = _validate_job_stage(stage)
+    _ensure_job_management_ready()
+    source_session = session_id.strip()
+    if not source_session and ":" in result_id:
+        source_session = result_id.split(":", 1)[0].strip()
+
+    with _job_db_conn() as conn:
+        resolved_job_id, _ = _resolve_job_management_target_in_conn(
+            conn,
+            user_id=uid,
+            job_id=int(job_id or 0),
+            job_url=job_url,
+            result_id=result_id,
+            session_id=session_id,
+        )
+        application, event = _set_job_stage_in_conn(
+            conn,
+            user_id=uid,
+            job_id=resolved_job_id,
+            stage=clean_stage,
+            note=note,
+            source_session_id=source_session,
+            reason="update_job_stage",
+        )
+        snapshot = _job_snapshot_in_conn(conn, uid, resolved_job_id)
+
+    return {
+        "user_id": uid,
+        "job": snapshot,
+        "application": application,
+        "event": event,
+        "job_db_path": DEFAULT_JOB_DB_PATH,
+    }
+
+
+@mcp.tool()
+def add_job_note(
+    user_id: str,
+    note: str,
+    job_id: int = 0,
+    job_url: str = "",
+    result_id: str = "",
+    session_id: str = "",
+) -> dict[str, Any]:
+    """Append a note to a job record in the local job-management database."""
+    uid = user_id.strip()
+    if not uid:
+        raise ValueError("user_id is required")
+    if not note.strip():
+        raise ValueError("note is required")
+    _ensure_job_management_ready()
+
+    with _job_db_conn() as conn:
+        resolved_job_id, _ = _resolve_job_management_target_in_conn(
+            conn,
+            user_id=uid,
+            job_id=int(job_id or 0),
+            job_url=job_url,
+            result_id=result_id,
+            session_id=session_id,
+        )
+        application, event = _append_job_note_in_conn(
+            conn,
+            user_id=uid,
+            job_id=resolved_job_id,
+            note=note,
+        )
+        snapshot = _job_snapshot_in_conn(conn, uid, resolved_job_id)
+
+    return {
+        "user_id": uid,
+        "job": snapshot,
+        "application": application,
+        "event": event,
+        "job_db_path": DEFAULT_JOB_DB_PATH,
+    }
+
+
+@mcp.tool()
+def list_jobs_by_stage(
+    user_id: str,
+    stage: str,
+    limit: int = 50,
+    offset: int = 0,
+) -> dict[str, Any]:
+    """List jobs for a user filtered by lifecycle stage."""
+    uid = user_id.strip()
+    if not uid:
+        raise ValueError("user_id is required")
+    clean_stage = _validate_job_stage(stage)
+    safe_limit = max(1, min(limit, 200))
+    safe_offset = max(offset, 0)
+    _ensure_job_management_ready()
+
+    with _job_db_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+              j.id AS job_id,
+              j.result_id,
+              j.job_url,
+              j.title,
+              j.company,
+              j.location,
+              j.site,
+              ja.stage,
+              ja.applied_at_utc,
+              ja.source_session_id,
+              ja.note,
+              ja.updated_at_utc AS stage_updated_at_utc
+            FROM job_applications ja
+            JOIN jobs j ON j.id = ja.job_id AND j.user_id = ja.user_id
+            WHERE ja.user_id = ? AND ja.stage = ?
+            ORDER BY ja.updated_at_utc DESC
+            LIMIT ? OFFSET ?
+            """,
+            (uid, clean_stage, safe_limit, safe_offset),
+        ).fetchall()
+        total = conn.execute(
+            """
+            SELECT COUNT(*) AS count
+            FROM job_applications
+            WHERE user_id = ? AND stage = ?
+            """,
+            (uid, clean_stage),
+        ).fetchone()
+
+    return {
+        "user_id": uid,
+        "stage": clean_stage,
+        "offset": safe_offset,
+        "limit": safe_limit,
+        "total_jobs": int(total["count"]) if total else 0,
+        "returned_jobs": len(rows),
+        "jobs": [_row_to_dict(row) for row in rows],
+        "job_db_path": DEFAULT_JOB_DB_PATH,
+    }
+
+
+@mcp.tool()
+def list_recent_job_events(
+    user_id: str,
+    limit: int = 50,
+    offset: int = 0,
+) -> dict[str, Any]:
+    """List recent lifecycle events for a user."""
+    uid = user_id.strip()
+    if not uid:
+        raise ValueError("user_id is required")
+    safe_limit = max(1, min(limit, 200))
+    safe_offset = max(offset, 0)
+    _ensure_job_management_ready()
+
+    with _job_db_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT
+              e.id AS event_id,
+              e.user_id,
+              e.job_id,
+              j.result_id,
+              j.job_url,
+              j.title,
+              j.company,
+              e.from_stage,
+              e.to_stage,
+              e.reason,
+              e.note,
+              e.created_at_utc
+            FROM job_events e
+            JOIN jobs j ON j.id = e.job_id AND j.user_id = e.user_id
+            WHERE e.user_id = ?
+            ORDER BY e.created_at_utc DESC, e.id DESC
+            LIMIT ? OFFSET ?
+            """,
+            (uid, safe_limit, safe_offset),
+        ).fetchall()
+        total = conn.execute(
+            "SELECT COUNT(*) AS count FROM job_events WHERE user_id = ?",
+            (uid,),
+        ).fetchone()
+
+    return {
+        "user_id": uid,
+        "offset": safe_offset,
+        "limit": safe_limit,
+        "total_events": int(total["count"]) if total else 0,
+        "returned_events": len(rows),
+        "events": [_row_to_dict(row) for row in rows],
+        "job_db_path": DEFAULT_JOB_DB_PATH,
+    }
+
+
+@mcp.tool()
+def get_job_pipeline_summary(user_id: str) -> dict[str, Any]:
+    """Return counts by stage and recent events for the local job pipeline."""
+    uid = user_id.strip()
+    if not uid:
+        raise ValueError("user_id is required")
+    _ensure_job_management_ready()
+
+    stage_counts = {stage: 0 for stage in sorted(VALID_JOB_STAGES)}
+    with _job_db_conn() as conn:
+        rows = conn.execute(
+            """
+            SELECT stage, COUNT(*) AS count
+            FROM job_applications
+            WHERE user_id = ?
+            GROUP BY stage
+            """,
+            (uid,),
+        ).fetchall()
+        for row in rows:
+            key = str(row["stage"]).strip().lower()
+            if key in stage_counts:
+                stage_counts[key] = int(row["count"])
+
+        recent_rows = conn.execute(
+            """
+            SELECT
+              e.id AS event_id,
+              e.job_id,
+              j.result_id,
+              j.job_url,
+              j.title,
+              j.company,
+              e.from_stage,
+              e.to_stage,
+              e.reason,
+              e.created_at_utc
+            FROM job_events e
+            JOIN jobs j ON j.id = e.job_id AND j.user_id = e.user_id
+            WHERE e.user_id = ?
+            ORDER BY e.created_at_utc DESC, e.id DESC
+            LIMIT 10
+            """,
+            (uid,),
+        ).fetchall()
+
+        total_jobs_row = conn.execute(
+            "SELECT COUNT(*) AS count FROM jobs WHERE user_id = ?",
+            (uid,),
+        ).fetchone()
+
+    return {
+        "user_id": uid,
+        "stage_counts": stage_counts,
+        "applied_jobs_count": int(stage_counts.get("applied", 0)),
+        "total_tracked_jobs": int(total_jobs_row["count"]) if total_jobs_row else 0,
+        "recent_events": [_row_to_dict(row) for row in recent_rows],
+        "job_db_path": DEFAULT_JOB_DB_PATH,
     }
 
 
@@ -2669,6 +3706,36 @@ def export_user_data(user_id: str) -> dict[str, Any]:
                 }
             )
 
+    _ensure_job_management_ready()
+    with _job_db_conn() as conn:
+        job_rows = conn.execute(
+            """
+            SELECT id, user_id, result_id, job_url, title, company, location, site, created_at_utc, updated_at_utc
+            FROM jobs
+            WHERE user_id = ?
+            ORDER BY updated_at_utc DESC, id DESC
+            """,
+            (uid,),
+        ).fetchall()
+        application_rows = conn.execute(
+            """
+            SELECT id, user_id, job_id, stage, applied_at_utc, source_session_id, note, updated_at_utc
+            FROM job_applications
+            WHERE user_id = ?
+            ORDER BY updated_at_utc DESC, id DESC
+            """,
+            (uid,),
+        ).fetchall()
+        event_rows = conn.execute(
+            """
+            SELECT id, user_id, job_id, from_stage, to_stage, reason, note, created_at_utc
+            FROM job_events
+            WHERE user_id = ?
+            ORDER BY created_at_utc DESC, id DESC
+            """,
+            (uid,),
+        ).fetchall()
+
     return {
         "user_id": uid,
         "exported_at_utc": _utcnow_iso(),
@@ -2678,12 +3745,20 @@ def export_user_data(user_id: str) -> dict[str, Any]:
             "saved_jobs": saved_jobs,
             "ignored_jobs": ignored_jobs,
             "search_sessions": exported_sessions,
+            "job_management": {
+                "jobs": [_row_to_dict(row) for row in job_rows],
+                "applications": [_row_to_dict(row) for row in application_rows],
+                "events": [_row_to_dict(row) for row in event_rows],
+            },
         },
         "counts": {
             "memory_lines": len(memory_lines),
             "saved_jobs": len(saved_jobs),
             "ignored_jobs": len(ignored_jobs),
             "search_sessions": len(exported_sessions),
+            "job_management_jobs": len(job_rows),
+            "job_management_applications": len(application_rows),
+            "job_management_events": len(event_rows),
         },
         "paths": {
             "preferences_path": DEFAULT_USER_PREFS_PATH,
@@ -2691,6 +3766,7 @@ def export_user_data(user_id: str) -> dict[str, Any]:
             "saved_jobs_path": DEFAULT_SAVED_JOBS_PATH,
             "ignored_jobs_path": DEFAULT_IGNORED_JOBS_PATH,
             "search_sessions_path": DEFAULT_SEARCH_SESSION_PATH,
+            "job_db_path": DEFAULT_JOB_DB_PATH,
         },
     }
 
@@ -2710,6 +3786,9 @@ def delete_user_data(user_id: str, confirm: bool = False) -> dict[str, Any]:
         "saved_jobs": 0,
         "ignored_jobs": 0,
         "search_sessions": 0,
+        "job_management_jobs": 0,
+        "job_management_applications": 0,
+        "job_management_events": 0,
     }
 
     prefs_store = _load_user_prefs()
@@ -2764,6 +3843,25 @@ def delete_user_data(user_id: str, confirm: bool = False) -> dict[str, Any]:
             _save_search_sessions(_prune_search_sessions(session_store))
         deleted["search_sessions"] = removed
 
+    _ensure_job_management_ready()
+    with _job_db_conn() as conn:
+        counts_row = conn.execute(
+            """
+            SELECT
+              (SELECT COUNT(*) FROM jobs WHERE user_id = ?) AS jobs_count,
+              (SELECT COUNT(*) FROM job_applications WHERE user_id = ?) AS applications_count,
+              (SELECT COUNT(*) FROM job_events WHERE user_id = ?) AS events_count
+            """,
+            (uid, uid, uid),
+        ).fetchone()
+        if counts_row:
+            deleted["job_management_jobs"] = int(counts_row["jobs_count"])
+            deleted["job_management_applications"] = int(counts_row["applications_count"])
+            deleted["job_management_events"] = int(counts_row["events_count"])
+        conn.execute("DELETE FROM job_events WHERE user_id = ?", (uid,))
+        conn.execute("DELETE FROM job_applications WHERE user_id = ?", (uid,))
+        conn.execute("DELETE FROM jobs WHERE user_id = ?", (uid,))
+
     return {
         "user_id": uid,
         "deleted": deleted,
@@ -2773,6 +3871,7 @@ def delete_user_data(user_id: str, confirm: bool = False) -> dict[str, Any]:
             "saved_jobs_path": DEFAULT_SAVED_JOBS_PATH,
             "ignored_jobs_path": DEFAULT_IGNORED_JOBS_PATH,
             "search_sessions_path": DEFAULT_SEARCH_SESSION_PATH,
+            "job_db_path": DEFAULT_JOB_DB_PATH,
         },
     }
 
@@ -3091,6 +4190,7 @@ def find_visa_sponsored_jobs(
             "rate_limit_retry_window_seconds": int(DEFAULT_RATE_LIMIT_RETRY_WINDOW_SECONDS),
             "rate_limit_initial_backoff_seconds": int(DEFAULT_RATE_LIMIT_INITIAL_BACKOFF_SECONDS),
             "rate_limit_max_backoff_seconds": int(DEFAULT_RATE_LIMIT_MAX_BACKOFF_SECONDS),
+            "fresh_search": True,
             "proxies_used": False,
         },
         "search_session": {
@@ -3181,6 +4281,7 @@ def refresh_company_dataset_cache(dataset_path: str = DEFAULT_DATASET_PATH) -> d
 
 def main() -> None:
     _disable_proxies()
+    _ensure_job_management_ready()
     mcp.run()
 
 

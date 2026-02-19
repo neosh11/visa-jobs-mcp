@@ -13,6 +13,7 @@ def _isolated_stores(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(server, "DEFAULT_SAVED_JOBS_PATH", str(tmp_path / "saved_jobs.json"))
     monkeypatch.setattr(server, "DEFAULT_IGNORED_JOBS_PATH", str(tmp_path / "ignored_jobs.json"))
     monkeypatch.setattr(server, "DEFAULT_SEARCH_SESSION_PATH", str(tmp_path / "search_sessions.json"))
+    monkeypatch.setattr(server, "DEFAULT_JOB_DB_PATH", str(tmp_path / "job_management.db"))
 
 
 def _write_dataset(path: Path) -> None:

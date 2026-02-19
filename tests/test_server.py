@@ -17,6 +17,7 @@ def _isolated_search_session_store(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(server, "DEFAULT_SEARCH_SESSION_PATH", str(tmp_path / "search_sessions.json"))
     monkeypatch.setattr(server, "DEFAULT_SAVED_JOBS_PATH", str(tmp_path / "saved_jobs.json"))
     monkeypatch.setattr(server, "DEFAULT_IGNORED_JOBS_PATH", str(tmp_path / "ignored_jobs.json"))
+    monkeypatch.setattr(server, "DEFAULT_JOB_DB_PATH", str(tmp_path / "job_management.db"))
 
 
 def _write_dataset(path: Path) -> None:
@@ -207,6 +208,9 @@ def test_get_mcp_capabilities_exposes_agent_contract() -> None:
     assert caps["design_decisions"]["llm_api_keys_required_by_mcp"] is False
     assert caps["design_decisions"]["free_forever"] is True
     assert caps["design_decisions"]["license"] == "MIT"
+    assert caps["design_decisions"]["data_not_shared_or_sold"] is True
+    assert caps["design_decisions"]["no_fake_reviews_or_bot_marketing"] is True
+    assert caps["design_decisions"]["first_class_job_management"] is True
     assert caps["design_decisions"]["strict_user_visa_match"] is True
     assert caps["design_decisions"]["rate_limit_backoff_retries"] is True
     assert caps["defaults"]["search_session_ttl_seconds"] == 21600
@@ -221,6 +225,12 @@ def test_get_mcp_capabilities_exposes_agent_contract() -> None:
     assert "clear_search_session" in tool_names
     assert "export_user_data" in tool_names
     assert "delete_user_data" in tool_names
+    assert "mark_job_applied" in tool_names
+    assert "update_job_stage" in tool_names
+    assert "list_jobs_by_stage" in tool_names
+    assert "add_job_note" in tool_names
+    assert "list_recent_job_events" in tool_names
+    assert "get_job_pipeline_summary" in tool_names
     assert "get_best_contact_strategy" in tool_names
     assert "generate_outreach_message" in tool_names
     assert "get_mcp_capabilities" not in tool_names  # list is intentional core user-facing tools
@@ -657,6 +667,9 @@ def test_export_and_delete_user_data(tmp_path: Path, monkeypatch) -> None:
     assert exported["counts"]["saved_jobs"] == 1
     assert exported["counts"]["ignored_jobs"] == 1
     assert exported["counts"]["search_sessions"] == 1
+    assert exported["counts"]["job_management_jobs"] >= 2
+    assert exported["counts"]["job_management_applications"] >= 2
+    assert "job_management" in exported["data"]
 
     deleted = server.delete_user_data(user_id="u1", confirm=True)
     assert deleted["deleted"]["preferences"] is True
@@ -664,6 +677,8 @@ def test_export_and_delete_user_data(tmp_path: Path, monkeypatch) -> None:
     assert deleted["deleted"]["saved_jobs"] == 1
     assert deleted["deleted"]["ignored_jobs"] == 1
     assert deleted["deleted"]["search_sessions"] == 1
+    assert deleted["deleted"]["job_management_jobs"] >= 2
+    assert deleted["deleted"]["job_management_applications"] >= 2
 
 
 def test_search_returns_recovery_suggestions_on_low_yield(tmp_path: Path, monkeypatch) -> None:

@@ -12,6 +12,9 @@ Job ingestion source: vendored JobSpy snapshot in `third_party/jobspy` (preferre
 - Native macOS run path.
 - Dockerized run path.
 - Free forever and open-source (MIT licensed, no trial/paywall).
+- First-class local job management (SQLite) with lifecycle stages.
+- Completely private by default: user data is stored locally and is not shared or sold.
+- Honest marketing stance: no fake reviews and no bot-driven promotion claims.
 - No proxy usage (proxy-related env vars are explicitly cleared at runtime).
 - No LLM calls from MCP runtime (agents provide reasoning; MCP provides deterministic data/tools).
 - Dataset-driven sponsorship matching with company normalization.
@@ -108,6 +111,7 @@ export VISA_RATE_LIMIT_INITIAL_BACKOFF_SECONDS="2"
 export VISA_RATE_LIMIT_MAX_BACKOFF_SECONDS="30"
 export VISA_SAVED_JOBS_PATH="data/config/saved_jobs.json"
 export VISA_IGNORED_JOBS_PATH="data/config/ignored_jobs.json"
+export VISA_JOB_DB_PATH="data/app/visa_jobs.db"
 ```
 
 Optional non-interactive setup:
@@ -325,6 +329,53 @@ Remove one ignored job by numeric id.
 Inputs:
 - `user_id` (required)
 - `ignored_job_id` (required)
+
+### `mark_job_applied`
+Mark a job as applied in first-class local job management.
+
+Inputs:
+- `user_id` (required)
+- one of: `job_id`, `job_url`, or `result_id`
+- `session_id`, `applied_at_utc`, `note` (optional)
+
+### `update_job_stage`
+Update lifecycle stage for a tracked job.
+
+Inputs:
+- `user_id` (required)
+- `stage` (required): `new`, `saved`, `applied`, `interview`, `offer`, `rejected`, `ignored`
+- one of: `job_id`, `job_url`, or `result_id`
+- `session_id`, `note` (optional)
+
+### `list_jobs_by_stage`
+List tracked jobs filtered by lifecycle stage.
+
+Inputs:
+- `user_id` (required)
+- `stage` (required)
+- `limit` / `offset` (optional)
+
+### `add_job_note`
+Append a note to a tracked job record.
+
+Inputs:
+- `user_id` (required)
+- `note` (required)
+- one of: `job_id`, `job_url`, or `result_id`
+- `session_id` (optional)
+
+### `list_recent_job_events`
+List recent stage transitions and note events.
+
+Inputs:
+- `user_id` (required)
+- `limit` / `offset` (optional)
+
+### `get_job_pipeline_summary`
+Return stage counts and recent events for a user pipeline.
+
+Inputs:
+- `user_id` (required)
 
 ### `clear_search_session`
 Delete one search session or all sessions for a user.

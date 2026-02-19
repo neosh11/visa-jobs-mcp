@@ -46,6 +46,22 @@ def main() -> None:
             f"preferences_path={prefs_path}",
         )
     )
+    job_db_path = Path(server.DEFAULT_JOB_DB_PATH)
+    checks.append(
+        _check(
+            "job_management_db_parent_writable",
+            job_db_path.parent.exists() or job_db_path.parent.parent.exists(),
+            f"job_db_path={job_db_path}",
+        )
+    )
+    server._ensure_job_management_ready()  # noqa: SLF001 - intentional startup parity check
+    checks.append(
+        _check(
+            "job_management_db_initialized",
+            job_db_path.exists(),
+            f"job_db_path={job_db_path}",
+        )
+    )
 
     freshness = server._dataset_freshness(  # noqa: SLF001 - intentionally reusing server contract
         dataset_path=str(dataset_path),

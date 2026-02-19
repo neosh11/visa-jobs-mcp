@@ -16,6 +16,7 @@ def _isolate_paths(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(server, "DEFAULT_SAVED_JOBS_PATH", str(tmp_path / "saved_jobs.json"))
     monkeypatch.setattr(server, "DEFAULT_IGNORED_JOBS_PATH", str(tmp_path / "ignored_jobs.json"))
     monkeypatch.setattr(server, "DEFAULT_DOL_MANIFEST_PATH", str(tmp_path / "pipeline_manifest.json"))
+    monkeypatch.setattr(server, "DEFAULT_JOB_DB_PATH", str(tmp_path / "job_management.db"))
 
 
 def test_setup_cli_non_interactive(monkeypatch, capsys) -> None:
