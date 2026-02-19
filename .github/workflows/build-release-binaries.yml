@@ -16,6 +16,8 @@ jobs:
     name: Build (${{ matrix.name }})
     runs-on: ${{ matrix.runs_on }}
     timeout-minutes: 20
+    env:
+      PYINSTALLER_CONFIG_DIR: ${{ github.workspace }}/.cache/pyinstaller
     strategy:
       fail-fast: false
       matrix:
@@ -30,11 +32,21 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Setup Python
+        id: setup-python
         uses: actions/setup-python@v5
         with:
           python-version: "3.13"
           cache: "pip"
           cache-dependency-path: pyproject.toml
+
+      - name: Restore PyInstaller cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ env.PYINSTALLER_CONFIG_DIR }}
+          key: pyinstaller-${{ runner.os }}-${{ runner.arch }}-py${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('pyproject.toml', 'scripts/build_release_binaries.sh') }}
+          restore-keys: |
+            pyinstaller-${{ runner.os }}-${{ runner.arch }}-py${{ steps.setup-python.outputs.python-version }}-
+            pyinstaller-${{ runner.os }}-${{ runner.arch }}-
 
       - name: Build binaries
         shell: bash

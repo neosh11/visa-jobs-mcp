@@ -80,6 +80,12 @@ Build local release binaries:
 ./scripts/build_release_binaries.sh
 ```
 
+If you need a fully clean PyInstaller rebuild:
+
+```bash
+PYINSTALLER_CLEAN=1 ./scripts/build_release_binaries.sh
+```
+
 Push a release tag (builds binaries on GitHub Actions and publishes assets):
 
 ```bash

@@ -57,6 +57,11 @@ mkdir -p "$BUILD_ROOT/wrappers" "$DIST_ROOT" "$RELEASE_ROOT"
 "$PYTHON_BIN" -m pip install -e .
 "$PYTHON_BIN" -m pip install pyinstaller
 
+PYINSTALLER_CLEAN_ARGS=()
+if [[ "${PYINSTALLER_CLEAN:-0}" == "1" ]]; then
+  PYINSTALLER_CLEAN_ARGS+=(--clean)
+fi
+
 TLS_DEP_DIR="$("$PYTHON_BIN" - <<'PY'
 from pathlib import Path
 import tls_client
@@ -104,7 +109,7 @@ PY
 
   "$PYTHON_BIN" -m PyInstaller \
     --noconfirm \
-    --clean \
+    "${PYINSTALLER_CLEAN_ARGS[@]}" \
     --onefile \
     --collect-all visa_jobs_mcp \
     --collect-all jobspy \
