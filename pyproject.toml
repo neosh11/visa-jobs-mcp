@@ -7,6 +7,7 @@ name = "visa-jobs-mcp"
 version = "0.1.0"
 description = "MCP server to discover visa-sponsoring jobs by area using JobSpy"
 readme = "README.md"
+license = {text = "MIT"}
 requires-python = ">=3.11"
 dependencies = [
   "mcp>=1.12.0",
@@ -19,6 +20,8 @@ dependencies = [
 [project.scripts]
 visa-jobs-mcp = "visa_jobs_mcp.server:main"
 visa-jobs-pipeline = "visa_jobs_mcp.pipeline_cli:main"
+visa-jobs-setup = "visa_jobs_mcp.setup_cli:main"
+visa-jobs-doctor = "visa_jobs_mcp.doctor_cli:main"
 
 [project.optional-dependencies]
 dev = [
