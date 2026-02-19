@@ -1,0 +1,13 @@
+services:
+  visa-jobs-mcp:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      - VISA_COMPANY_DATASET_PATH=/workspace/data/companies.csv
+      - VISA_JOB_SITES=linkedin
+      - VISA_INDEED_COUNTRY=USA
+    volumes:
+      - ./:/workspace
+    stdin_open: true
+    tty: true

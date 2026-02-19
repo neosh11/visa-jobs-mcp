@@ -1,0 +1,14 @@
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+.venv/
+.env
+.DS_Store
+data/pipeline/
+data/raw/
+data/config/
+data/companies.csv
+temp/linkedin/
+temp/
