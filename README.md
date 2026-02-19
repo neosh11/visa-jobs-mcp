@@ -2,6 +2,8 @@
 
 `visa-jobs-mcp` is an MCP server that helps agents find visa-friendly jobs from fresh LinkedIn searches.
 
+<img width="775" height="663" alt="Screenshot 2026-02-20 at 10 20 22 am" src="https://github.com/user-attachments/assets/91dd3b16-59eb-42d5-806a-155c8d7b985f" />
+
 It is built for speed and practical outcomes:
 - search jobs in a location,
 - match employers against sponsorship history,
