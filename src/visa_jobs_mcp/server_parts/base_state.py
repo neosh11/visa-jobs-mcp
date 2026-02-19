@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from .base_runtime import *  # noqa: F401,F403
 from .base_jobs import *  # noqa: F401,F403
+from .base_runtime import _load_user_prefs, _normalize_visa_type
 
 def _blob_store_path(path: str | None = None) -> str:
     return path or DEFAULT_USER_BLOB_PATH
@@ -318,5 +319,4 @@ def _get_required_user_visa_types(user_id: str) -> list[str]:
             f"user_id='{uid}' has no preferred_visa_types. Set visa preferences first using set_user_preferences."
         )
     return sorted({_normalize_visa_type(v) for v in stored})
-
 
