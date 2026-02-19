@@ -58,6 +58,15 @@ Health check:
 visa-jobs-doctor --user-id "<your-user-id>"
 ```
 
+## GitHub Pages
+This repo includes a simple product page at `index.html` for GitHub Pages.
+
+To publish:
+1. In GitHub repository settings, open `Pages`.
+2. Set source to `Deploy from a branch`.
+3. Select branch `main` and folder `/ (root)`.
+4. Save; your page will publish at `<org-or-user>.github.io/<repo>`.
+
 Optional: pre-build the company dataset now (otherwise it auto-builds on first query):
 ```bash
 visa-jobs-pipeline

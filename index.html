@@ -1,0 +1,186 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Visa Jobs MCP</title>
+  <meta name="description" content="Free-forever, private, agent-native MCP for visa-targeted job search.">
+  <style>
+    :root {
+      --bg: #f8f7f4;
+      --text: #1d1d1d;
+      --muted: #555;
+      --line: #d8d6cf;
+      --accent: #0e5f4f;
+      --card: #ffffff;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: Georgia, "Times New Roman", serif;
+      line-height: 1.55;
+    }
+    main {
+      max-width: 860px;
+      margin: 0 auto;
+      padding: 2rem 1.2rem 3rem;
+    }
+    h1, h2 { line-height: 1.2; margin: 0 0 .5rem; }
+    h1 { font-size: 2rem; }
+    h2 { font-size: 1.2rem; margin-top: 2rem; }
+    p { margin: .4rem 0 1rem; }
+    .sub { color: var(--muted); margin-top: .2rem; }
+    .hero {
+      border: 1px solid var(--line);
+      background: var(--card);
+      padding: 1.2rem;
+      margin-top: .8rem;
+    }
+    .pill {
+      display: inline-block;
+      font-size: .85rem;
+      border: 1px solid var(--line);
+      padding: .25rem .55rem;
+      margin: .15rem .2rem .15rem 0;
+      color: var(--muted);
+      background: #fafafa;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: .8rem;
+      margin-top: .8rem;
+    }
+    .card {
+      border: 1px solid var(--line);
+      background: var(--card);
+      padding: .8rem .9rem;
+    }
+    .card h3 {
+      margin: 0 0 .35rem;
+      font-size: 1rem;
+      color: var(--accent);
+    }
+    ul, ol {
+      margin: .35rem 0 0 1.1rem;
+      padding: 0;
+    }
+    li { margin: .25rem 0; }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-size: .9em;
+      background: #f1f1ef;
+      border: 1px solid #e2e0d9;
+      padding: .08rem .3rem;
+    }
+    pre {
+      margin: .65rem 0 0;
+      padding: .7rem;
+      border: 1px solid var(--line);
+      background: #fbfbfa;
+      overflow-x: auto;
+      font-size: .85rem;
+    }
+    .note {
+      border-left: 3px solid var(--accent);
+      background: #f4f8f6;
+      padding: .6rem .75rem;
+      margin-top: .75rem;
+    }
+    footer {
+      margin-top: 2rem;
+      color: var(--muted);
+      border-top: 1px solid var(--line);
+      padding-top: .9rem;
+      font-size: .95rem;
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Visa Jobs MCP</h1>
+    <p class="sub">First-in-class agent-native infrastructure for visa-targeted job search.</p>
+
+    <section class="hero">
+      <p><strong>Always free.</strong> <strong>Completely private.</strong> <strong>Built for agents.</strong></p>
+      <p>
+        We run fresh searches by location and title, then apply strict visa-fit logic with explicit evidence.
+        No fake reviews. No bot marketing. No paywall.
+      </p>
+      <span class="pill">Free Forever</span>
+      <span class="pill">MIT Licensed</span>
+      <span class="pill">Private by Default</span>
+      <span class="pill">Agent-Native</span>
+      <span class="pill">LinkedIn Focused</span>
+    </section>
+
+    <h2>Why This Is Different</h2>
+    <div class="grid">
+      <article class="card">
+        <h3>Freshness Is Explicit</h3>
+        <p>
+          Jobs come from fresh live searches, not from stale listing dumps. Sponsorship dataset freshness is also
+          returned as metadata so agents can reason about trust directly.
+        </p>
+      </article>
+      <article class="card">
+        <h3>Completely Private</h3>
+        <p>
+          User preferences and memory live locally. Data is not shared, sold, or used for ad targeting.
+          Agents get only the data needed to execute the workflow.
+        </p>
+      </article>
+      <article class="card">
+        <h3>Agent-Native Category Leader</h3>
+        <p>
+          The product is designed as MCP infrastructure first: machine-readable capabilities, deterministic pagination,
+          strict contracts, and explicit next-action payloads.
+        </p>
+      </article>
+      <article class="card">
+        <h3>Always Free + Honest</h3>
+        <p>
+          Core offering is free forever under MIT. No fake social proof, no synthetic testimonials, no bot marketing.
+        </p>
+      </article>
+    </div>
+
+    <h2>Agent Workflow</h2>
+    <ol>
+      <li>Call <code>get_mcp_capabilities</code> to discover contracts and defaults.</li>
+      <li>Call <code>set_user_preferences</code> and optional <code>set_user_constraints</code>.</li>
+      <li>Call <code>get_user_readiness</code> to verify setup and freshness context.</li>
+      <li>Call <code>find_visa_sponsored_jobs</code> with location/title/user.</li>
+      <li>Use <code>result_id</code> for <code>save_job_for_later</code> and <code>ignore_job</code>.</li>
+      <li>Use <code>recovery_suggestions</code> when yield is low.</li>
+    </ol>
+
+    <pre>{
+  "strict_visa_match": true,
+  "fresh_search": true,
+  "data_private_local": true,
+  "pricing": "free_forever",
+  "license": "MIT"
+}</pre>
+
+    <h2>Current Limitation (Honest)</h2>
+    <div class="note">
+      <strong>Gap today:</strong> first-class “mark as applied” tracking is not yet a dedicated MCP tool.
+      This is the next product upgrade so users can set and query applied status directly.
+    </div>
+
+    <h2>Roadmap Direction</h2>
+    <ul>
+      <li>Add <code>mark_job_applied</code> + <code>list_applied_jobs</code> with timestamps and notes.</li>
+      <li>Add application-stage tracking (<code>applied</code>, <code>interview</code>, <code>offer</code>, <code>rejected</code>).</li>
+      <li>Keep all user state local and exportable.</li>
+    </ul>
+
+    <footer>
+      Visa Jobs MCP is built for urgent, high-trust visa job search orchestration by AI agents.
+    </footer>
+  </main>
+</body>
+</html>
