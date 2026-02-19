@@ -29,14 +29,6 @@ case "$OS_NAME" in
     ;;
 esac
 
-TLS_DEP_DIR="$("$PYTHON_BIN" - <<'PY'
-from pathlib import Path
-import tls_client
-
-print(Path(tls_client.__file__).resolve().parent / "dependencies")
-PY
-)"
-
 TLS_LIB_NAME=""
 if [[ "$OS_NAME" == "darwin" ]]; then
   if [[ "$ARCH" == "arm64" ]]; then
@@ -53,6 +45,25 @@ elif [[ "$OS_NAME" == "linux" ]]; then
     TLS_LIB_NAME="tls-client-x86.so"
   fi
 fi
+
+BUILD_ROOT="$ROOT_DIR/build/pyinstaller"
+DIST_ROOT="$ROOT_DIR/dist/bin"
+RELEASE_ROOT="$ROOT_DIR/dist/release"
+
+rm -rf "$BUILD_ROOT" "$DIST_ROOT"
+mkdir -p "$BUILD_ROOT/wrappers" "$DIST_ROOT" "$RELEASE_ROOT"
+
+"$PYTHON_BIN" -m pip install --upgrade pip
+"$PYTHON_BIN" -m pip install -e .
+"$PYTHON_BIN" -m pip install pyinstaller
+
+TLS_DEP_DIR="$("$PYTHON_BIN" - <<'PY'
+from pathlib import Path
+import tls_client
+
+print(Path(tls_client.__file__).resolve().parent / "dependencies")
+PY
+)"
 
 if [[ ! -f "${TLS_DEP_DIR}/${TLS_LIB_NAME}" ]]; then
   echo "Expected TLS dependency missing: ${TLS_DEP_DIR}/${TLS_LIB_NAME}" >&2
@@ -78,17 +89,6 @@ restore_tls_files() {
 }
 
 trap restore_tls_files EXIT
-
-BUILD_ROOT="$ROOT_DIR/build/pyinstaller"
-DIST_ROOT="$ROOT_DIR/dist/bin"
-RELEASE_ROOT="$ROOT_DIR/dist/release"
-
-rm -rf "$BUILD_ROOT" "$DIST_ROOT"
-mkdir -p "$BUILD_ROOT/wrappers" "$DIST_ROOT" "$RELEASE_ROOT"
-
-"$PYTHON_BIN" -m pip install --upgrade pip
-"$PYTHON_BIN" -m pip install -e .
-"$PYTHON_BIN" -m pip install pyinstaller
 
 build_entrypoint() {
   local exe_name="$1"
