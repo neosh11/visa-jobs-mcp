@@ -89,7 +89,7 @@ Push a release tag (builds binaries on GitHub Actions and publishes assets):
 Automated macOS binary builds:
 - Workflow: `.github/workflows/build-release-binaries.yml`
 - Trigger by pushing a tag like `v0.1.1` (or via manual workflow dispatch).
-- The workflow builds macOS binaries for both `macos-13` (x86_64) and `macos-14` (arm64), then uploads them to the GitHub release.
+- The workflow builds macOS binaries for both `macos-15-intel` (x86_64) and `macos-15` (arm64), then uploads them to the GitHub release.
 
 ## GitHub Pages
 This repo includes a simple product page at `index.html` for GitHub Pages.
