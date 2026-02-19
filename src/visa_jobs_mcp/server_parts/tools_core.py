@@ -41,6 +41,7 @@ def get_mcp_capabilities() -> dict[str, Any]:
             "strictness_mode": "strict",
             "dataset_stale_after_days": int(DEFAULT_DATASET_STALE_AFTER_DAYS),
             "job_db_path": DEFAULT_JOB_DB_PATH,
+            "tool_call_soft_timeout_seconds": int(DEFAULT_TOOL_CALL_SOFT_TIMEOUT_SECONDS),
             "rate_limit_retry_window_seconds": int(DEFAULT_RATE_LIMIT_RETRY_WINDOW_SECONDS),
             "rate_limit_initial_backoff_seconds": int(DEFAULT_RATE_LIMIT_INITIAL_BACKOFF_SECONDS),
             "rate_limit_max_backoff_seconds": int(DEFAULT_RATE_LIMIT_MAX_BACKOFF_SECONDS),
@@ -707,5 +708,4 @@ def delete_user_memory_line(user_id: str, line_id: int) -> dict[str, Any]:
         "total_lines": len(remaining),
         "path": DEFAULT_USER_BLOB_PATH,
     }
-
 

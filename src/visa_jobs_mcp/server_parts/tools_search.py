@@ -48,6 +48,9 @@ def find_visa_sponsored_jobs(
 
     _disable_proxies()
     _ensure_dataset_exists(dataset_path)
+    call_started_mono = time.monotonic()
+    soft_timeout_seconds = max(10, int(DEFAULT_TOOL_CALL_SOFT_TIMEOUT_SECONDS))
+    deadline_mono = call_started_mono + float(soft_timeout_seconds)
     dataset_freshness = _dataset_freshness(
         dataset_path=dataset_path,
         manifest_path=DEFAULT_DOL_MANIFEST_PATH,
@@ -127,6 +130,7 @@ def find_visa_sponsored_jobs(
     last_scraped_jobs_count = 0
     last_requested_scan_target = max(results_wanted, cached_scan_target)
     scan_exhausted = False
+    call_budget_exhausted = False
     rate_limit_retry_attempts = 0
     rate_limit_backoff_seconds = 0.0
 
@@ -161,6 +165,19 @@ def find_visa_sponsored_jobs(
         last_raw_jobs = pd.DataFrame([])
         evaluated_results: list[EvaluatedJob] = []
         while True:
+            remaining_budget_seconds = max(0.0, deadline_mono - time.monotonic())
+            if remaining_budget_seconds <= 3.0 and scan_attempts:
+                call_budget_exhausted = True
+                break
+
+            effective_retry_window_seconds = min(
+                int(DEFAULT_RATE_LIMIT_RETRY_WINDOW_SECONDS),
+                max(0, int(remaining_budget_seconds - 2.0)),
+            )
+            if effective_retry_window_seconds <= 0:
+                call_budget_exhausted = True
+                break
+
             raw_jobs, scrape_attempts, scrape_backoff_seconds = _scrape_jobs_with_backoff(
                 site_name=chosen_sites,
                 search_term=job_title,
@@ -168,7 +185,7 @@ def find_visa_sponsored_jobs(
                 results_wanted=scan_target,
                 hours_old=hours_old,
                 country_indeed=DEFAULT_INDEED_COUNTRY,
-                retry_window_seconds=DEFAULT_RATE_LIMIT_RETRY_WINDOW_SECONDS,
+                retry_window_seconds=effective_retry_window_seconds,
                 initial_backoff_seconds=DEFAULT_RATE_LIMIT_INITIAL_BACKOFF_SECONDS,
                 max_backoff_seconds=DEFAULT_RATE_LIMIT_MAX_BACKOFF_SECONDS,
             )
@@ -191,6 +208,26 @@ def find_visa_sponsored_jobs(
                     "accepted_jobs": int(len(evaluated_results)),
                 }
             )
+            can_expand_scan = (
+                auto_expand_scan
+                and len(evaluated_results) < required_accepted_for_page
+                and len(raw_jobs) >= scan_target
+                and scan_target < max_scan_results
+            )
+            next_scan_target = (
+                min(
+                    max_scan_results,
+                    max(scan_target * 2, scan_target + (max_returned * scan_multiplier)),
+                )
+                if can_expand_scan
+                else scan_target
+            )
+            if time.monotonic() >= deadline_mono:
+                call_budget_exhausted = True
+                if next_scan_target > scan_target:
+                    # Persist deeper target so the next call with the same session resumes progress.
+                    scan_target = next_scan_target
+                break
 
             if not auto_expand_scan:
                 break
@@ -201,23 +238,23 @@ def find_visa_sponsored_jobs(
             if scan_target >= max_scan_results:
                 break
 
-            next_scan_target = min(
-                max_scan_results,
-                max(scan_target * 2, scan_target + (max_returned * scan_multiplier)),
-            )
             if next_scan_target <= scan_target:
                 break
             scan_target = next_scan_target
 
         accepted_job_dicts = [asdict(job) for job in evaluated_results]
         last_scraped_jobs_count = int(len(last_raw_jobs))
-        last_requested_scan_target = scan_attempts[-1]["results_wanted"] if scan_attempts else scan_target
+        if scan_attempts:
+            last_requested_scan_target = max(int(scan_attempts[-1]["results_wanted"]), int(scan_target))
+        else:
+            last_requested_scan_target = scan_target
         scan_exhausted = (
             len(accepted_job_dicts) < required_accepted_for_page
             and (
                 not auto_expand_scan
                 or last_requested_scan_target >= max_scan_results
                 or last_scraped_jobs_count < last_requested_scan_target
+                or call_budget_exhausted
             )
         )
 
@@ -281,6 +318,7 @@ def find_visa_sponsored_jobs(
         "latest_scan_target": int(last_requested_scan_target),
         "scraped_jobs": int(last_scraped_jobs_count),
         "scan_exhausted": bool(scan_exhausted),
+        "tool_call_time_budget_exhausted": bool(call_budget_exhausted),
         "scan_attempts_detail": scan_attempts,
         "rate_limit_retry_attempts": int(rate_limit_retry_attempts),
         "rate_limit_backoff_seconds": float(round(rate_limit_backoff_seconds, 2)),
@@ -313,6 +351,7 @@ def find_visa_sponsored_jobs(
             "auto_expand_scan": auto_expand_scan,
             "scan_multiplier": scan_multiplier,
             "max_scan_results": max_scan_results,
+            "tool_call_soft_timeout_seconds": int(soft_timeout_seconds),
             "rate_limit_retry_window_seconds": int(DEFAULT_RATE_LIMIT_RETRY_WINDOW_SECONDS),
             "rate_limit_initial_backoff_seconds": int(DEFAULT_RATE_LIMIT_INITIAL_BACKOFF_SECONDS),
             "rate_limit_max_backoff_seconds": int(DEFAULT_RATE_LIMIT_MAX_BACKOFF_SECONDS),
@@ -339,6 +378,7 @@ def find_visa_sponsored_jobs(
             "cache_hit": bool(cache_hit),
             "scan_attempts": int(len(scan_attempts)),
             "scan_attempts_detail": scan_attempts,
+            "tool_call_time_budget_exhausted": bool(call_budget_exhausted),
             "rate_limit_retry_attempts": int(rate_limit_retry_attempts),
             "rate_limit_backoff_seconds": float(round(rate_limit_backoff_seconds, 2)),
             "confidence_model_version": CONFIDENCE_MODEL_VERSION,
@@ -360,6 +400,10 @@ def find_visa_sponsored_jobs(
             "rate_limit_guidance": (
                 "If a search fails with a rate-limit error, wait a few minutes and retry the same call."
             ),
+            "if_no_results_retry_same_call": (
+                "If no jobs are returned, retry find_visa_sponsored_jobs with the same session_id. "
+                "The server will continue the scan from where it left off."
+            ),
             "fallback_guidance": (
                 "If results are sparse, show recovery_suggestions and ask the user to approve one."
             ),
@@ -371,6 +415,18 @@ def find_visa_sponsored_jobs(
                     "max_returned": int(max_returned),
                 }
                 if next_offset is not None
+                else None
+            ),
+            "retry_hint_when_no_results": (
+                {
+                    "tool": "find_visa_sponsored_jobs",
+                    "session_id": search_session_id,
+                    "offset": 0,
+                    "max_returned": int(max_returned),
+                    "results_wanted": int(max(results_wanted, last_requested_scan_target)),
+                    "refresh_session": False,
+                }
+                if len(filtered_accepted_job_dicts) == 0
                 else None
             ),
         },
@@ -403,5 +459,3 @@ def refresh_company_dataset_cache(dataset_path: str = DEFAULT_DATASET_PATH) -> d
         "rows": int(len(df)),
         "distinct_normalized_companies": int(df["normalized_company"].nunique()),
     }
-
-

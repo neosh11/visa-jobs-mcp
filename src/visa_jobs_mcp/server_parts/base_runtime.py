@@ -78,6 +78,10 @@ DEFAULT_RATE_LIMIT_MAX_BACKOFF_SECONDS = _env_int(
     "VISA_RATE_LIMIT_MAX_BACKOFF_SECONDS",
     30,
 )
+DEFAULT_TOOL_CALL_SOFT_TIMEOUT_SECONDS = _env_int(
+    "VISA_TOOL_CALL_SOFT_TIMEOUT_SECONDS",
+    55,
+)
 DEFAULT_SEARCH_SESSION_PATH = os.getenv(
     "VISA_SEARCH_SESSION_PATH",
     "data/config/search_sessions.json",
@@ -907,5 +911,4 @@ def _resolve_job_management_target_in_conn(
     )
     job_record = _get_job_by_id_in_conn(conn, uid, upserted_id) or {}
     return upserted_id, job_record
-
 

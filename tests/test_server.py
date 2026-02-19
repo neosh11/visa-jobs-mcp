@@ -469,6 +469,50 @@ def test_find_jobs_rate_limit_failure_after_retry_window(tmp_path: Path, monkeyp
     assert sleeps == [2.0, 3.0]
 
 
+def test_find_jobs_honors_tool_call_time_budget_and_returns_retry_hint(tmp_path: Path, monkeypatch) -> None:
+    dataset = tmp_path / "companies.csv"
+    _write_dataset(dataset)
+    monkeypatch.setattr(server, "_get_required_user_visa_types", lambda user_id: ["h1b"])
+    server._load_company_dataset.cache_clear()
+
+    # Force a sparse-result scenario so the tool would normally keep expanding scans.
+    monkeypatch.setattr(
+        server,
+        "scrape_jobs",
+        lambda **kwargs: pd.DataFrame(
+            [
+                {
+                    "title": "SE1",
+                    "company": "Unknown Co",
+                    "location": "Austin, TX",
+                    "site": "linkedin",
+                    "description": "General role text",
+                    "job_url": "https://example.com/none",
+                    "date_posted": "2026-02-18",
+                }
+            ]
+        ),
+    )
+    monkeypatch.setattr(server, "DEFAULT_TOOL_CALL_SOFT_TIMEOUT_SECONDS", 10)
+
+    monotonic_values = iter([0.0, 0.0, 9.8, 10.2])
+    monkeypatch.setattr(server.time, "monotonic", lambda: next(monotonic_values, 10.2))
+
+    result = server.find_visa_sponsored_jobs(
+        location="Austin, TX",
+        job_title="software engineer",
+        user_id="u1",
+        dataset_path=str(dataset),
+        max_returned=10,
+        results_wanted=10,
+    )
+
+    assert result["stats"]["accepted_jobs"] == 0
+    assert result["agent_guidance"]["retry_hint_when_no_results"] is not None
+    assert result["agent_guidance"]["retry_hint_when_no_results"]["tool"] == "find_visa_sponsored_jobs"
+    assert result["agent_guidance"]["retry_hint_when_no_results"]["refresh_session"] is False
+
+
 def test_strict_vs_balanced_mode_for_generic_sponsorship_text(tmp_path: Path, monkeypatch) -> None:
     dataset = tmp_path / "companies.csv"
     _write_dataset(dataset)
