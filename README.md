@@ -83,12 +83,12 @@ Build local release binaries:
 Push a release tag (builds binaries on GitHub Actions and publishes assets):
 
 ```bash
-./scripts/release_tag.sh 0.1
+./scripts/release_tag.sh 0.2
 ```
 
 Automated macOS binary builds:
 - Workflow: `.github/workflows/build-release-binaries.yml`
-- Trigger by pushing a tag like `v0.1.1` (or via manual workflow dispatch).
+- Trigger by pushing a tag like `v0.2.1` (or via manual workflow dispatch).
 - The workflow builds macOS binaries for both `macos-15-intel` (x86_64) and `macos-15` (arm64), then uploads them to the GitHub release.
 
 ## GitHub Pages
