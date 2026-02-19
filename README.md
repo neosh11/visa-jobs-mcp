@@ -52,6 +52,7 @@ Tap repository:
 Note:
 - This tap is intended to install prebuilt binaries from GitHub releases.
 - If a release asset for your architecture is missing, install will fail until the release workflow finishes.
+- Current release in tap: `v0.2`.
 
 Then run:
 ```bash
