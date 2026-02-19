@@ -49,7 +49,7 @@ Tap repository:
 Note:
 - This tap is intended to install prebuilt binaries from GitHub releases.
 - If a release asset for your architecture is missing, install will fail until the release workflow finishes.
-- Current release in tap: `v0.2`.
+- Current release in tap: `v0.2.5`.
 
 Then run:
 ```bash
@@ -70,6 +70,25 @@ Upgrade:
 ```bash
 brew upgrade neosh11/visa-jobs-mcp/visa-jobs-mcp
 ```
+
+## Configure in Codex
+If you use Codex, add this MCP server once:
+
+```bash
+codex mcp add visa-jobs-mcp --env VISA_JOB_SITES=linkedin -- /opt/homebrew/bin/visa-jobs-mcp
+```
+
+Verify:
+```bash
+codex mcp list
+codex mcp get visa-jobs-mcp
+```
+
+This writes an MCP server block to `~/.codex/config.toml`.
+
+Then start a new Codex session and ask naturally, for example:
+- `Set my visa preference to E3.`
+- `Find software engineer jobs in New York that sponsor E3.`
 
 ## Maintainer packaging (binary releases)
 Build local release binaries:
