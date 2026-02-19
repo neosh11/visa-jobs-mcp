@@ -56,6 +56,9 @@ PY
     --noconfirm \
     --clean \
     --onefile \
+    --collect-all visa_jobs_mcp \
+    --collect-all jobspy \
+    --collect-all tls_client \
     --name "$exe_name" \
     --distpath "$DIST_ROOT" \
     --workpath "$BUILD_ROOT/work-${exe_name}" \
