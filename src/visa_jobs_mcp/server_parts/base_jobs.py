@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+import importlib
 
 from .base_runtime import *  # noqa: F401,F403
 from .base_runtime import (
@@ -8,6 +9,7 @@ from .base_runtime import (
     _ensure_job_db,
     _job_db_conn,
     _job_db_path,
+    _load_search_sessions,
     _parse_utc_iso,
     _save_search_sessions,
     _set_job_stage_in_conn,
@@ -17,14 +19,14 @@ from .base_runtime import (
 )
 
 def _migrate_job_management_from_json(path: str | None = None) -> dict[str, Any]:
-    load_saved_jobs = globals().get("_load_saved_jobs")
-    load_ignored_jobs = globals().get("_load_ignored_jobs")
-    normalize_saved_job = globals().get("_normalized_saved_job")
-    normalize_ignored_job = globals().get("_normalized_ignored_job")
-    if not callable(load_saved_jobs) or not callable(load_ignored_jobs):
-        raise NameError("Saved/ignored job store helpers are not available")
-    if not callable(normalize_saved_job) or not callable(normalize_ignored_job):
-        raise NameError("Saved/ignored job normalizers are not available")
+    # Import lazily to avoid circular import at module load time. Use absolute module
+    # path so this still works when functions are rebound into visa_jobs_mcp.server.
+    _base_state = importlib.import_module("visa_jobs_mcp.server_parts.base_state")
+
+    load_saved_jobs = _base_state._load_saved_jobs
+    load_ignored_jobs = _base_state._load_ignored_jobs
+    normalize_saved_job = _base_state._normalized_saved_job
+    normalize_ignored_job = _base_state._normalized_ignored_job
 
     _ensure_job_db(path)
     with _job_db_conn(path) as conn:
@@ -43,7 +45,7 @@ def _migrate_job_management_from_json(path: str | None = None) -> dict[str, Any]
 
         saved_jobs_migrated = 0
         ignored_jobs_migrated = 0
-        saved_store = load_saved_jobs()
+        saved_store = load_saved_jobs(DEFAULT_SAVED_JOBS_PATH)
         users = saved_store.get("users", {}) if isinstance(saved_store, dict) else {}
         if isinstance(users, dict):
             for uid, entry in users.items():
@@ -73,7 +75,7 @@ def _migrate_job_management_from_json(path: str | None = None) -> dict[str, Any]
                     )
                     saved_jobs_migrated += 1
 
-        ignored_store = load_ignored_jobs()
+        ignored_store = load_ignored_jobs(DEFAULT_IGNORED_JOBS_PATH)
         ignored_users = ignored_store.get("users", {}) if isinstance(ignored_store, dict) else {}
         if isinstance(ignored_users, dict):
             for uid, entry in ignored_users.items():
