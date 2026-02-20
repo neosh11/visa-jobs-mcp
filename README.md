@@ -112,7 +112,7 @@ Generated from `get_mcp_capabilities()` via `scripts/generate_contract_docs.py`.
 
 ### Server
 - `server`: `visa-jobs-mcp`
-- `version`: `0.3.0-dev`
+- `version`: `0.3.0`
 - `capabilities_schema_version`: `1.1.0`
 - `confidence_model_version`: `v1.1.0-rules-go`
 
@@ -619,7 +619,7 @@ Generated from `get_mcp_capabilities()` via `scripts/generate_contract_docs.py`.
       "required_inputs": []
     }
   ],
-  "version": "0.3.0-dev"
+  "version": "0.3.0"
 }
 ```
 

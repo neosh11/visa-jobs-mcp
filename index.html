@@ -154,7 +154,7 @@ brew install neosh11/visa-jobs-mcp/visa-jobs-mcp
       Homebrew tap:
       <a href="https://github.com/neosh11/homebrew-visa-jobs-mcp">github.com/neosh11/homebrew-visa-jobs-mcp</a>
       <br>
-      Current release: <code>v0.2.9</code>
+      Current release: <code>v0.3.0</code>
     </p>
 
     <h2>Configure in Codex</h2>
@@ -205,7 +205,7 @@ codex mcp get visa-jobs-mcp
       <p><strong>Server</strong></p>
       <ul>
         <li><code>server</code>: <code>visa-jobs-mcp</code></li>
-        <li><code>version</code>: <code>0.2.9</code></li>
+        <li><code>version</code>: <code>0.3.0</code></li>
         <li><code>capabilities_schema_version</code>: <code>1.1.0</code></li>
       </ul>
       <p><strong>Required Before Search</strong></p>
@@ -215,6 +215,7 @@ codex mcp get visa-jobs-mcp
       </ul>
       <p><strong>Tools</strong></p>
       <ul>
+        <li><code>get_mcp_capabilities</code>: Return MCP capabilities, tools, and contracts for agent self-discovery. (required: <code>-</code>; optional: <code>-</code>)</li>
         <li><code>set_user_preferences</code>: Save the user&#x27;s visa preferences required before search. (required: <code>user_id, preferred_visa_types</code>; optional: <code>-</code>)</li>
         <li><code>set_user_constraints</code>: Save urgency and work-mode constraints used for personalized guidance. (required: <code>user_id</code>; optional: <code>-</code>)</li>
         <li><code>get_user_preferences</code>: Fetch the saved user preferences and constraints. (required: <code>user_id</code>; optional: <code>-</code>)</li>
@@ -253,8 +254,22 @@ codex mcp get visa-jobs-mcp
       </ul>
       <p><strong>Search Response Fields</strong></p>
       <ul>
+        <li><code>run</code></li>
+        <li><code>status</code></li>
+        <li><code>stats</code></li>
+        <li><code>guidance</code></li>
+        <li><code>dataset_freshness</code></li>
+        <li><code>pagination</code></li>
+        <li><code>recovery_suggestions</code></li>
         <li><code>jobs[].result_id</code></li>
         <li><code>jobs[].job_url</code></li>
+        <li><code>jobs[].title</code></li>
+        <li><code>jobs[].company</code></li>
+        <li><code>jobs[].location</code></li>
+        <li><code>jobs[].site</code></li>
+        <li><code>jobs[].date_posted</code></li>
+        <li><code>jobs[].description_fetched</code></li>
+        <li><code>jobs[].description_excerpt</code></li>
         <li><code>jobs[].employer_contacts</code></li>
         <li><code>jobs[].visa_counts</code></li>
         <li><code>jobs[].visas_sponsored</code></li>
@@ -262,19 +277,7 @@ codex mcp get visa-jobs-mcp
         <li><code>jobs[].eligibility_reasons</code></li>
         <li><code>jobs[].confidence_score</code></li>
         <li><code>jobs[].confidence_model_version</code></li>
-        <li><code>jobs[].contactability_score</code></li>
-        <li><code>jobs[].matched_via_company_dataset</code></li>
-        <li><code>jobs[].matched_via_job_description</code></li>
-        <li><code>jobs[].matches_user_visa_preferences</code></li>
-        <li><code>search_progress</code></li>
-        <li><code>feedback_summary</code></li>
-        <li><code>personalization_notes</code></li>
-        <li><code>search_session</code></li>
-        <li><code>stats</code></li>
-        <li><code>agent_guidance</code></li>
-        <li><code>pagination</code></li>
-        <li><code>dataset_freshness</code></li>
-        <li><code>recovery_suggestions</code></li>
+        <li><code>jobs[].agent_guidance</code></li>
       </ul>
       <p><strong>Paths</strong></p>
       <ul>
@@ -294,7 +297,7 @@ codex mcp get visa-jobs-mcp
         <pre><code>
 {
   &quot;capabilities_schema_version&quot;: &quot;1.1.0&quot;,
-  &quot;confidence_model_version&quot;: &quot;v1.1.0-rules&quot;,
+  &quot;confidence_model_version&quot;: &quot;v1.1.0-rules-go&quot;,
   &quot;defaults&quot;: {
     &quot;dataset_stale_after_days&quot;: 30,
     &quot;job_db_path&quot;: &quot;data/app/visa_jobs.db&quot;,
@@ -374,8 +377,22 @@ codex mcp get visa-jobs-mcp
     &quot;tool&quot;: &quot;set_user_preferences&quot;
   },
   &quot;search_response_fields_for_agents&quot;: [
+    &quot;run&quot;,
+    &quot;status&quot;,
+    &quot;stats&quot;,
+    &quot;guidance&quot;,
+    &quot;dataset_freshness&quot;,
+    &quot;pagination&quot;,
+    &quot;recovery_suggestions&quot;,
     &quot;jobs[].result_id&quot;,
     &quot;jobs[].job_url&quot;,
+    &quot;jobs[].title&quot;,
+    &quot;jobs[].company&quot;,
+    &quot;jobs[].location&quot;,
+    &quot;jobs[].site&quot;,
+    &quot;jobs[].date_posted&quot;,
+    &quot;jobs[].description_fetched&quot;,
+    &quot;jobs[].description_excerpt&quot;,
     &quot;jobs[].employer_contacts&quot;,
     &quot;jobs[].visa_counts&quot;,
     &quot;jobs[].visas_sponsored&quot;,
@@ -383,22 +400,15 @@ codex mcp get visa-jobs-mcp
     &quot;jobs[].eligibility_reasons&quot;,
     &quot;jobs[].confidence_score&quot;,
     &quot;jobs[].confidence_model_version&quot;,
-    &quot;jobs[].contactability_score&quot;,
-    &quot;jobs[].matched_via_company_dataset&quot;,
-    &quot;jobs[].matched_via_job_description&quot;,
-    &quot;jobs[].matches_user_visa_preferences&quot;,
-    &quot;search_progress&quot;,
-    &quot;feedback_summary&quot;,
-    &quot;personalization_notes&quot;,
-    &quot;search_session&quot;,
-    &quot;stats&quot;,
-    &quot;agent_guidance&quot;,
-    &quot;pagination&quot;,
-    &quot;dataset_freshness&quot;,
-    &quot;recovery_suggestions&quot;
+    &quot;jobs[].agent_guidance&quot;
   ],
   &quot;server&quot;: &quot;visa-jobs-mcp&quot;,
   &quot;tools&quot;: [
+    {
+      &quot;description&quot;: &quot;Return MCP capabilities, tools, and contracts for agent self-discovery.&quot;,
+      &quot;name&quot;: &quot;get_mcp_capabilities&quot;,
+      &quot;required_inputs&quot;: []
+    },
     {
       &quot;description&quot;: &quot;Save the user&#x27;s visa preferences required before search.&quot;,
       &quot;name&quot;: &quot;set_user_preferences&quot;,
@@ -664,7 +674,7 @@ codex mcp get visa-jobs-mcp
       &quot;required_inputs&quot;: []
     }
   ],
-  &quot;version&quot;: &quot;0.2.9&quot;
+  &quot;version&quot;: &quot;0.3.0&quot;
 }
         </code></pre>
       </details>

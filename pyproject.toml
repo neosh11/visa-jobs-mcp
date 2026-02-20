@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "visa-jobs-mcp"
-version = "0.2.10"
+version = "0.3.0"
 description = "Internal pipeline utilities for refreshing visa sponsorship datasets"
 readme = "README.md"
 license = {text = "MIT"}
