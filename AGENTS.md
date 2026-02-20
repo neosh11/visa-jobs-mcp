@@ -8,6 +8,7 @@ Code guide for contributors and coding agents working in `visa-jobs-mcp`.
 - Keep default sponsor dataset path as `data/companies.csv`.
 - Keep all user state local/private; no remote telemetry by default.
 - Require visa preference setup (`set_user_preferences`) before starting searches.
+- Keep MCP runtime implemented in Go only; Python code is pipeline-only.
 
 ## Architecture
 - Go MCP entrypoint: `cmd/visa-jobs-mcp/main.go`
