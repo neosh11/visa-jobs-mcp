@@ -1,9 +1,11 @@
 package user
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
+	"time"
 )
 
 func executeSearchQuery(
@@ -63,7 +65,7 @@ func executeSearchQuery(
 			Location: query.Location,
 			HoursOld: query.HoursOld,
 			Start:    start,
-		})
+		}, isCancelled)
 		if err != nil {
 			return nil, nil, "", err
 		}
@@ -103,6 +105,10 @@ func executeSearchQuery(
 
 	onProgress("filter", "Evaluating visa relevance.", 76, map[string]any{"raw_jobs_scanned": len(rawJobs)})
 	accepted := []map[string]any{}
+	descriptionFetches := 0
+	descriptionFetchLimit := maxDescriptionFetches()
+	descriptionDeadline := time.Now().Add(time.Duration(descriptionBudgetSeconds()) * time.Second)
+	descriptionBudgetHit := false
 	for idx, raw := range rawJobs {
 		if isCancelled() {
 			return nil, nil, "", errSearchRunCancelled
@@ -146,8 +152,29 @@ func executeSearchQuery(
 		fetchedDescription := false
 		needsDescription := query.RequireDescriptionSignal || desiredCount == 0
 		if needsDescription {
-			descriptionText, _ = client.FetchJobDescription(raw.JobURL)
-			fetchedDescription = descriptionText != ""
+			canFetchDescription := descriptionFetches < descriptionFetchLimit && time.Now().Before(descriptionDeadline)
+			if canFetchDescription {
+				if descriptionFetches%5 == 0 {
+					onProgress("filter", "Checking job descriptions for visa signals.", 80, map[string]any{
+						"description_fetches":     descriptionFetches,
+						"description_fetch_limit": descriptionFetchLimit,
+						"accepted_jobs":           len(accepted),
+					})
+				}
+				text, fetchErr := client.FetchJobDescription(raw.JobURL, isCancelled)
+				if errors.Is(fetchErr, errSearchRunCancelled) {
+					return nil, nil, "", errSearchRunCancelled
+				}
+				if fetchErr == nil {
+					descriptionText = text
+					fetchedDescription = descriptionText != ""
+				}
+				descriptionFetches++
+				stats.DescriptionFetches = descriptionFetches
+			} else {
+				descriptionBudgetHit = true
+				stats.DescriptionFetchSkipped++
+			}
 		}
 		descriptionPositive, descriptionNegative, mentioned := detectDescriptionSignals(descriptionText)
 		descriptionDesired := hasDesiredMention(mentioned, desiredVisaTypes)
@@ -211,7 +238,7 @@ func executeSearchQuery(
 			"confidence_model_version": "v1.1.0-rules-go",
 			"agent_guidance":           guidance,
 		})
-		if len(accepted) >= requiredAccepted && scanExhausted {
+		if len(accepted) >= requiredAccepted {
 			break
 		}
 
@@ -249,6 +276,13 @@ func executeSearchQuery(
 			"suggested_titles": findRelatedTitlesInternal(query.JobTitle, 8),
 		})
 	}
+	if descriptionBudgetHit {
+		recoverySuggestions = append(recoverySuggestions, map[string]any{
+			"type":                    "description_probe_budget_reached",
+			"message":                 "Stopped description probing due runtime budget; narrow the search or rerun.",
+			"description_fetch_limit": descriptionFetchLimit,
+		})
+	}
 
 	labels := labelsForDesiredVisas(desiredVisaTypes)
 	statusMessage := fmt.Sprintf(
@@ -270,6 +304,10 @@ func executeSearchQuery(
 		"returned_jobs":              stats.ReturnedJobs,
 		"company_matches":            stats.CompanyMatches,
 		"description_signal_matches": stats.DescriptionSignalMatches,
+		"description_fetches":        stats.DescriptionFetches,
+		"description_fetch_skipped":  stats.DescriptionFetchSkipped,
+		"description_fetch_limit":    descriptionFetchLimit,
+		"description_budget_hit":     descriptionBudgetHit,
 		"ignored_jobs_skipped":       stats.IgnoredJobsSkipped,
 		"ignored_companies_skipped":  stats.IgnoredCompaniesSkipped,
 		"dataset_rows":               stats.DatasetRows,

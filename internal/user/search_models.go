@@ -8,11 +8,13 @@ import (
 )
 
 const (
-	defaultSearchResultsWanted       = 300
+	defaultSearchResultsWanted       = 5
 	defaultSearchHoursOld            = 336
 	defaultSearchMaxReturned         = 10
 	defaultSearchScanMultiplier      = 8
 	defaultSearchMaxScanResults      = 1200
+	defaultSearchMaxDescriptionFetch = 40
+	defaultSearchDescriptionBudget   = 90
 	defaultSearchRunTTLSeconds       = 21600
 	defaultSearchSessionTTLSeconds   = 21600
 	defaultSearchMaxRuns             = 500
@@ -59,8 +61,8 @@ type linkedInSearchQuery struct {
 }
 
 type linkedInClient interface {
-	FetchSearchPage(query linkedInSearchQuery) ([]linkedInJob, error)
-	FetchJobDescription(jobURL string) (string, error)
+	FetchSearchPage(query linkedInSearchQuery, isCancelled func() bool) ([]linkedInJob, error)
+	FetchJobDescription(jobURL string, isCancelled func() bool) (string, error)
 }
 
 type searchQuery struct {
@@ -87,6 +89,8 @@ type searchExecutionStats struct {
 	ReturnedJobs             int
 	CompanyMatches           int
 	DescriptionSignalMatches int
+	DescriptionFetches       int
+	DescriptionFetchSkipped  int
 	IgnoredJobsSkipped       int
 	IgnoredCompaniesSkipped  int
 	DatasetRows              int
@@ -140,6 +144,22 @@ func rateLimitMaxBackoffSeconds() int {
 
 func linkedInRequestTimeoutSeconds() int {
 	return envInt("VISA_LINKEDIN_TIMEOUT_SECONDS", defaultLinkedInRequestTimeoutSec)
+}
+
+func maxDescriptionFetches() int {
+	value := envInt("VISA_MAX_DESCRIPTION_FETCHES", defaultSearchMaxDescriptionFetch)
+	if value < 1 {
+		return 1
+	}
+	return value
+}
+
+func descriptionBudgetSeconds() int {
+	value := envInt("VISA_DESCRIPTION_BUDGET_SECONDS", defaultSearchDescriptionBudget)
+	if value < 1 {
+		return 1
+	}
+	return value
 }
 
 func strictnessOrDefault(value string) string {

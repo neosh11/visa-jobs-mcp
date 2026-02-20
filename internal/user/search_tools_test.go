@@ -13,9 +13,10 @@ type fakeLinkedInClient struct {
 	pages        map[int][]linkedInJob
 	descriptions map[string]string
 	pageDelay    time.Duration
+	descCalls    int
 }
 
-func (f *fakeLinkedInClient) FetchSearchPage(query linkedInSearchQuery) ([]linkedInJob, error) {
+func (f *fakeLinkedInClient) FetchSearchPage(query linkedInSearchQuery, _ func() bool) ([]linkedInJob, error) {
 	if f.pageDelay > 0 {
 		time.Sleep(f.pageDelay)
 	}
@@ -25,7 +26,8 @@ func (f *fakeLinkedInClient) FetchSearchPage(query linkedInSearchQuery) ([]linke
 	return out, nil
 }
 
-func (f *fakeLinkedInClient) FetchJobDescription(jobURL string) (string, error) {
+func (f *fakeLinkedInClient) FetchJobDescription(jobURL string, _ func() bool) (string, error) {
+	f.descCalls++
 	if text, ok := f.descriptions[jobURL]; ok {
 		return text, nil
 	}
@@ -230,5 +232,133 @@ func TestCancelVisaJobSearch(t *testing.T) {
 	finalStatus := waitForTerminalRunStatus(t, "u1", runID, 5*time.Second)
 	if got := getString(finalStatus, "status"); got != "cancelled" {
 		t.Fatalf("expected cancelled status, got %q (%#v)", got, finalStatus)
+	}
+}
+
+func TestDescriptionFetchBudgetCapsRuntimeWork(t *testing.T) {
+	setupUserToolPaths(t)
+	t.Setenv("VISA_MAX_DESCRIPTION_FETCHES", "7")
+	root := t.TempDir()
+	datasetPath := filepath.Join(root, "companies.csv")
+	writeTestDataset(t, datasetPath)
+
+	if _, err := SetUserPreferences(map[string]any{
+		"user_id":              "u2",
+		"preferred_visa_types": []any{"E3"},
+	}); err != nil {
+		t.Fatalf("SetUserPreferences failed: %v", err)
+	}
+
+	rows := make([]linkedInJob, 0, 20)
+	for idx := 0; idx < 20; idx++ {
+		rows = append(rows, linkedInJob{
+			JobURL:   fmt.Sprintf("https://www.linkedin.com/jobs/view/desc-%d/", idx+1),
+			Title:    "Software Engineer",
+			Company:  "Unknown Co",
+			Location: "New York, NY",
+			Site:     "linkedin",
+		})
+	}
+
+	originalFactory := linkedInClientFactory
+	defer func() {
+		linkedInClientFactory = originalFactory
+	}()
+	fake := &fakeLinkedInClient{
+		pages: map[int][]linkedInJob{
+			0: rows,
+		},
+		descriptions: map[string]string{},
+	}
+	linkedInClientFactory = func() linkedInClient { return fake }
+
+	started, err := StartVisaJobSearch(map[string]any{
+		"user_id":          "u2",
+		"location":         "New York, NY",
+		"job_title":        "Software Engineer",
+		"dataset_path":     datasetPath,
+		"results_wanted":   5,
+		"max_returned":     5,
+		"scan_multiplier":  4,
+		"max_scan_results": 20,
+		"strictness_mode":  "balanced",
+	})
+	if err != nil {
+		t.Fatalf("StartVisaJobSearch failed: %v", err)
+	}
+	runID := getString(started, "run_id")
+	if runID == "" {
+		t.Fatalf("missing run_id in start payload")
+	}
+
+	finalStatus := waitForTerminalRunStatus(t, "u2", runID, 3*time.Second)
+	if got := getString(finalStatus, "status"); got != "completed" {
+		t.Fatalf("expected completed status, got %q (%#v)", got, finalStatus)
+	}
+
+	results, err := GetVisaJobSearchResults(map[string]any{
+		"user_id": "u2",
+		"run_id":  runID,
+	})
+	if err != nil {
+		t.Fatalf("GetVisaJobSearchResults failed: %v", err)
+	}
+	stats := mapOrNil(results["stats"])
+	if stats == nil {
+		t.Fatalf("missing stats in response: %#v", results)
+	}
+	if got := intOrZero(stats["description_fetches"]); got != 7 {
+		t.Fatalf("expected description_fetches=7, got %d (stats=%#v)", got, stats)
+	}
+	if got := intOrZero(stats["description_fetch_skipped"]); got == 0 {
+		t.Fatalf("expected description_fetch_skipped > 0, got %d (stats=%#v)", got, stats)
+	}
+	if fake.descCalls != 7 {
+		t.Fatalf("expected fake description calls=7, got %d", fake.descCalls)
+	}
+}
+
+func TestStartSearchDefaultsResultsWantedToFive(t *testing.T) {
+	setupUserToolPaths(t)
+	root := t.TempDir()
+	datasetPath := filepath.Join(root, "companies.csv")
+	writeTestDataset(t, datasetPath)
+
+	if _, err := SetUserPreferences(map[string]any{
+		"user_id":              "u3",
+		"preferred_visa_types": []any{"E3"},
+	}); err != nil {
+		t.Fatalf("SetUserPreferences failed: %v", err)
+	}
+
+	originalFactory := linkedInClientFactory
+	defer func() {
+		linkedInClientFactory = originalFactory
+	}()
+	linkedInClientFactory = func() linkedInClient {
+		return &fakeLinkedInClient{
+			pages: map[int][]linkedInJob{
+				0: {},
+			},
+		}
+	}
+
+	started, err := StartVisaJobSearch(map[string]any{
+		"user_id":      "u3",
+		"location":     "New York, NY",
+		"job_title":    "Software Engineer",
+		"dataset_path": datasetPath,
+	})
+	if err != nil {
+		t.Fatalf("StartVisaJobSearch failed: %v", err)
+	}
+	runID := getString(started, "run_id")
+	run, err := loadRunForUser(runID, "u3")
+	if err != nil {
+		t.Fatalf("loadRunForUser failed: %v", err)
+	}
+	query := mapOrNil(run["query"])
+	if got := intOrZero(query["results_wanted"]); got != 5 {
+		t.Fatalf("expected default results_wanted=5, got %d", got)
 	}
 }

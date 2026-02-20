@@ -120,6 +120,7 @@ func isRateLimitError(err error) bool {
 
 func requestWithRateLimitBackoff(
 	doRequest func() (*resty.Response, error),
+	isCancelled func() bool,
 ) (*resty.Response, float64, int, error) {
 	window := float64(rateLimitRetryWindowSeconds())
 	backoff := float64(rateLimitInitialBackoffSeconds())
@@ -128,6 +129,9 @@ func requestWithRateLimitBackoff(
 	retries := 0
 
 	for {
+		if isCancelled != nil && isCancelled() {
+			return nil, elapsed, retries, errSearchRunCancelled
+		}
 		resp, err := doRequest()
 		if err == nil && resp != nil && !isRateLimitStatus(resp.StatusCode()) {
 			return resp, elapsed, retries, nil
@@ -164,14 +168,43 @@ func requestWithRateLimitBackoff(
 		if sleepFor <= 0 {
 			return nil, elapsed, retries, fmt.Errorf("rate limited by upstream job source (429/Too Many Requests). Retried for 3 minutes without recovery. Please try again shortly")
 		}
-		time.Sleep(time.Duration(sleepFor * float64(time.Second)))
+		sleepDur := time.Duration(sleepFor * float64(time.Second))
+		if !sleepWithCancel(sleepDur, isCancelled) {
+			return nil, elapsed, retries, errSearchRunCancelled
+		}
 		elapsed += sleepFor
 		retries++
 		backoff *= 2
 	}
 }
 
-func (c *liveLinkedInClient) FetchSearchPage(query linkedInSearchQuery) ([]linkedInJob, error) {
+func sleepWithCancel(duration time.Duration, isCancelled func() bool) bool {
+	if duration <= 0 {
+		return true
+	}
+	if isCancelled == nil {
+		time.Sleep(duration)
+		return true
+	}
+	const slice = 250 * time.Millisecond
+	deadline := time.Now().Add(duration)
+	for {
+		if isCancelled() {
+			return false
+		}
+		remaining := time.Until(deadline)
+		if remaining <= 0 {
+			return true
+		}
+		step := slice
+		if remaining < step {
+			step = remaining
+		}
+		time.Sleep(step)
+	}
+}
+
+func (c *liveLinkedInClient) FetchSearchPage(query linkedInSearchQuery, isCancelled func() bool) ([]linkedInJob, error) {
 	params := map[string]string{
 		"keywords": query.JobTitle,
 		"location": query.Location,
@@ -184,7 +217,7 @@ func (c *liveLinkedInClient) FetchSearchPage(query linkedInSearchQuery) ([]linke
 		return c.httpClient.R().
 			SetQueryParams(params).
 			Get(linkedInSearchURL)
-	})
+	}, isCancelled)
 	if err != nil {
 		return nil, err
 	}
@@ -192,10 +225,10 @@ func (c *liveLinkedInClient) FetchSearchPage(query linkedInSearchQuery) ([]linke
 	return parseLinkedInListHTML(body)
 }
 
-func (c *liveLinkedInClient) FetchJobDescription(jobURL string) (string, error) {
+func (c *liveLinkedInClient) FetchJobDescription(jobURL string, isCancelled func() bool) (string, error) {
 	resp, _, _, err := requestWithRateLimitBackoff(func() (*resty.Response, error) {
 		return c.httpClient.R().Get(jobURL)
-	})
+	}, isCancelled)
 	if err != nil {
 		return "", err
 	}
