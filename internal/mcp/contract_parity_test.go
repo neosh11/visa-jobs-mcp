@@ -12,7 +12,7 @@ func TestAllContractToolsHaveHandlers(t *testing.T) {
 		t.Fatalf("ToolContracts failed: %v", err)
 	}
 	for _, tc := range tools {
-		if _, ok := implementedToolHandlers[tc.Name]; !ok && tc.Name != "get_mcp_capabilities" {
+		if _, ok := implementedToolHandlers[tc.Name]; !ok {
 			t.Fatalf("missing handler for contract tool %q", tc.Name)
 		}
 	}
