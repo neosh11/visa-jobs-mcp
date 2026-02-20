@@ -13,7 +13,7 @@ data = tomllib.loads(Path('pyproject.toml').read_text(encoding='utf-8'))
 print(data['project']['version'])
 PY
 )}"
-PYI_BUNDLE_MODE="${PYI_BUNDLE_MODE:-onedir}"
+PYI_BUNDLE_MODE="${PYI_BUNDLE_MODE:-onefile}"
 
 OS_NAME="$(uname -s | tr '[:upper:]' '[:lower:]')"
 ARCH="$(uname -m)"
@@ -145,6 +145,28 @@ build_entrypoint "visa-jobs-mcp" "server_cli"
 build_entrypoint "visa-jobs-pipeline" "pipeline_cli"
 build_entrypoint "visa-jobs-setup" "setup_cli"
 build_entrypoint "visa-jobs-doctor" "doctor_cli"
+
+normalize_macos_macho_ids() {
+  if [[ "$OS_NAME" != "darwin" || "$PYI_BUNDLE_MODE" != "onedir" ]]; then
+    return
+  fi
+
+  while IFS= read -r -d '' file; do
+    if ! otool -D "$file" >/tmp/visa_jobs_otool_id.txt 2>/dev/null; then
+      continue
+    fi
+    current_id="$(sed -n '2p' /tmp/visa_jobs_otool_id.txt || true)"
+    if [[ -z "${current_id}" ]]; then
+      continue
+    fi
+    if [[ "${current_id}" == @rpath/* ]]; then
+      install_name_tool -id "@loader_path/$(basename "$file")" "$file" || true
+    fi
+  done < <(find "$DIST_ROOT" -type f \( -name '*.so' -o -name '*.dylib' \) -print0)
+  rm -f /tmp/visa_jobs_otool_id.txt
+}
+
+normalize_macos_macho_ids
 
 ARTIFACT="visa-jobs-mcp-v${VERSION}-${PLATFORM}.tar.gz"
 tar -czf "$RELEASE_ROOT/$ARTIFACT" \

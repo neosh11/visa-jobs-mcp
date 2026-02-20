@@ -54,6 +54,7 @@ jobs:
           INPUT_VERSION: ${{ github.event.inputs.version }}
           REF_VERSION: ${{ github.ref_name }}
           REF_TYPE: ${{ github.ref_type }}
+          PYI_BUNDLE_MODE: onefile
         run: |
           VERSION="${INPUT_VERSION}"
           if [[ -z "${VERSION}" && "${REF_TYPE}" == "tag" ]]; then
