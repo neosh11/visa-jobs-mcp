@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeoutError
+
 from .base_runtime import *  # noqa: F401,F403
 from .base_runtime import (
     _JOB_DB_READY_PATHS,
@@ -375,6 +377,10 @@ def _is_rate_limit_error(exc: Exception) -> bool:
     return any(token in text for token in ("429", "rate limit", "ratelimit", "too many requests"))
 
 
+def _is_scrape_timeout_error(exc: Exception) -> bool:
+    return "job source scrape attempt timed out" in str(exc).lower()
+
+
 def _scrape_jobs_with_backoff(
     *,
     site_name: list[str],
@@ -386,17 +392,21 @@ def _scrape_jobs_with_backoff(
     retry_window_seconds: int = DEFAULT_RATE_LIMIT_RETRY_WINDOW_SECONDS,
     initial_backoff_seconds: int = DEFAULT_RATE_LIMIT_INITIAL_BACKOFF_SECONDS,
     max_backoff_seconds: int = DEFAULT_RATE_LIMIT_MAX_BACKOFF_SECONDS,
+    attempt_timeout_seconds: int = DEFAULT_SCRAPE_ATTEMPT_TIMEOUT_SECONDS,
 ) -> tuple[pd.DataFrame, int, float]:
     attempts = 0
     elapsed_backoff_seconds = 0.0
     backoff_seconds = float(max(1, initial_backoff_seconds))
     retry_window = float(max(0, retry_window_seconds))
     max_backoff = float(max(1, max_backoff_seconds))
+    attempt_timeout = float(max(1, attempt_timeout_seconds))
 
     while True:
         attempts += 1
         try:
-            raw = scrape_jobs(
+            executor = ThreadPoolExecutor(max_workers=1)
+            future = executor.submit(
+                scrape_jobs,
                 site_name=site_name,
                 search_term=search_term,
                 location=location,
@@ -404,8 +414,20 @@ def _scrape_jobs_with_backoff(
                 hours_old=hours_old,
                 country_indeed=country_indeed,
             )
+            try:
+                raw = future.result(timeout=attempt_timeout)
+            except FutureTimeoutError as exc:
+                future.cancel()
+                raise RuntimeError(
+                    "Job source scrape attempt timed out before completion. "
+                    "Please retry with the same session_id."
+                ) from exc
+            finally:
+                executor.shutdown(wait=False, cancel_futures=True)
             return raw, attempts, elapsed_backoff_seconds
         except Exception as exc:
+            if _is_scrape_timeout_error(exc):
+                raise
             if not _is_rate_limit_error(exc):
                 raise
             if elapsed_backoff_seconds >= retry_window:

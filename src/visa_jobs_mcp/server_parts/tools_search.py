@@ -585,18 +585,34 @@ def find_visa_sponsored_jobs(
             if effective_retry_window_seconds <= 0:
                 call_budget_exhausted = True
                 break
-
-            raw_jobs, scrape_attempts, scrape_backoff_seconds = _scrape_jobs_with_backoff(
-                site_name=chosen_sites,
-                search_term=job_title,
-                location=location,
-                results_wanted=scan_target,
-                hours_old=hours_old,
-                country_indeed=DEFAULT_INDEED_COUNTRY,
-                retry_window_seconds=effective_retry_window_seconds,
-                initial_backoff_seconds=DEFAULT_RATE_LIMIT_INITIAL_BACKOFF_SECONDS,
-                max_backoff_seconds=DEFAULT_RATE_LIMIT_MAX_BACKOFF_SECONDS,
+            attempt_timeout_seconds = min(
+                int(DEFAULT_SCRAPE_ATTEMPT_TIMEOUT_SECONDS),
+                max(1, int(remaining_budget_seconds - 2.0)),
             )
+
+            try:
+                raw_jobs, scrape_attempts, scrape_backoff_seconds = _scrape_jobs_with_backoff(
+                    site_name=chosen_sites,
+                    search_term=job_title,
+                    location=location,
+                    results_wanted=scan_target,
+                    hours_old=hours_old,
+                    country_indeed=DEFAULT_INDEED_COUNTRY,
+                    retry_window_seconds=effective_retry_window_seconds,
+                    initial_backoff_seconds=DEFAULT_RATE_LIMIT_INITIAL_BACKOFF_SECONDS,
+                    max_backoff_seconds=DEFAULT_RATE_LIMIT_MAX_BACKOFF_SECONDS,
+                    attempt_timeout_seconds=attempt_timeout_seconds,
+                )
+            except Exception as exc:
+                if _is_scrape_timeout_error(exc):
+                    call_budget_exhausted = True
+                    add_progress(
+                        "scraping_linkedin",
+                        "Current scrape attempt timed out; returning partial results for continuation.",
+                        jobs_scanned_so_far=int(last_scraped_jobs_count),
+                    )
+                    break
+                raise
             rate_limit_retry_attempts += max(0, scrape_attempts - 1)
             rate_limit_backoff_seconds += float(scrape_backoff_seconds)
             raw_jobs = _dedupe_raw_jobs(raw_jobs)
@@ -816,6 +832,7 @@ def find_visa_sponsored_jobs(
             "rate_limit_retry_window_seconds": int(DEFAULT_RATE_LIMIT_RETRY_WINDOW_SECONDS),
             "rate_limit_initial_backoff_seconds": int(DEFAULT_RATE_LIMIT_INITIAL_BACKOFF_SECONDS),
             "rate_limit_max_backoff_seconds": int(DEFAULT_RATE_LIMIT_MAX_BACKOFF_SECONDS),
+            "scrape_attempt_timeout_seconds": int(DEFAULT_SCRAPE_ATTEMPT_TIMEOUT_SECONDS),
             "fresh_search": True,
             "proxies_used": False,
         },
