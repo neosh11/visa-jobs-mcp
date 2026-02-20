@@ -293,7 +293,8 @@ func TestStartVisaJobSearchReturnsRunMetadata(t *testing.T) {
 		t.Fatalf("expected non-error tool result, got %#v", result)
 	}
 	structured, _ := result.StructuredContent.(map[string]any)
-	if got := getStringFromAnyMap(structured, "run_id"); got == "" {
+	runID := getStringFromAnyMap(structured, "run_id")
+	if runID == "" {
 		t.Fatalf("expected run_id in response, got %#v", structured)
 	}
 	status := strings.ToLower(getStringFromAnyMap(structured, "status"))
@@ -305,6 +306,7 @@ func TestStartVisaJobSearchReturnsRunMetadata(t *testing.T) {
 	if got := getStringFromAnyMap(structured, "poll_tool"); got != "get_visa_job_search_status" {
 		t.Fatalf("expected poll_tool=get_visa_job_search_status, got %q", got)
 	}
+	waitForTerminalRunStatusViaTool(t, session, "default", runID, 5*time.Second)
 }
 
 func connectTestSession(t *testing.T) (*mcpSDK.Server, *mcpSDK.ClientSession, func()) {
@@ -426,4 +428,40 @@ func intFromAny(value any) (int, bool) {
 	default:
 		return 0, false
 	}
+}
+
+func waitForTerminalRunStatusViaTool(t *testing.T, session *mcpSDK.ClientSession, userID, runID string, timeout time.Duration) {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		statusResult, err := session.CallTool(context.Background(), &mcpSDK.CallToolParams{
+			Name: "get_visa_job_search_status",
+			Arguments: map[string]any{
+				"user_id": userID,
+				"run_id":  runID,
+				"cursor":  0,
+			},
+		})
+		if err != nil {
+			t.Fatalf("get_visa_job_search_status failed: %v", err)
+		}
+		if statusResult.IsError {
+			t.Fatalf("get_visa_job_search_status returned tool error: %#v", statusResult)
+		}
+		structured, _ := statusResult.StructuredContent.(map[string]any)
+		terminal, _ := structured["is_terminal"].(bool)
+		if terminal {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+
+	_, _ = session.CallTool(context.Background(), &mcpSDK.CallToolParams{
+		Name: "cancel_visa_job_search",
+		Arguments: map[string]any{
+			"user_id": userID,
+			"run_id":  runID,
+		},
+	})
+	t.Fatalf("timeout waiting for search run to reach terminal status: run_id=%s", runID)
 }
