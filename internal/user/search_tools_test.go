@@ -26,12 +26,15 @@ func (f *fakeLinkedInClient) FetchSearchPage(query linkedInSearchQuery, _ func()
 	return out, nil
 }
 
-func (f *fakeLinkedInClient) FetchJobDescription(jobURL string, _ func() bool) (string, error) {
+func (f *fakeLinkedInClient) FetchJobDetails(jobURL, _, _ string, _ func() bool) (linkedInJobDetails, error) {
 	f.descCalls++
 	if text, ok := f.descriptions[jobURL]; ok {
-		return text, nil
+		return linkedInJobDetails{
+			Description: text,
+			IsRemote:    boolPtr(detectLinkedInRemote("", "", text)),
+		}, nil
 	}
-	return "", nil
+	return linkedInJobDetails{}, nil
 }
 
 func writeTestDataset(t *testing.T, path string) {

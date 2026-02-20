@@ -22,7 +22,7 @@ var (
 	sharedToolMutex sync.Mutex
 )
 
-var Version = "0.3.0"
+var Version = "0.3.1"
 
 var implementedToolHandlers = map[string]toolHandler{
 	"get_mcp_capabilities":                getMCPCapabilities,

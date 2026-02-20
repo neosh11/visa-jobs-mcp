@@ -150,15 +150,17 @@
     <pre><code>brew tap neosh11/visa-jobs-mcp
 brew install neosh11/visa-jobs-mcp/visa-jobs-mcp
 </code></pre>
+    <p>Windows: download the <code>windows-x86_64</code> asset from Releases and add <code>visa-jobs-mcp.exe</code> to your <code>PATH</code>.</p>
     <p>
       Homebrew tap:
       <a href="https://github.com/neosh11/homebrew-visa-jobs-mcp">github.com/neosh11/homebrew-visa-jobs-mcp</a>
       <br>
-      Current release: <code>v0.3.0</code>
+      Current release: <code>v0.3.1</code>
     </p>
 
     <h2>Configure in Codex</h2>
     <pre><code>codex mcp add visa-jobs-mcp --env VISA_JOB_SITES=linkedin -- /opt/homebrew/bin/visa-jobs-mcp
+codex mcp add visa-jobs-mcp --env VISA_JOB_SITES=linkedin -- visa-jobs-mcp.exe
 codex mcp list
 codex mcp get visa-jobs-mcp
 </code></pre>
@@ -205,8 +207,8 @@ codex mcp get visa-jobs-mcp
       <p><strong>Server</strong></p>
       <ul>
         <li><code>server</code>: <code>visa-jobs-mcp</code></li>
-        <li><code>version</code>: <code>0.3.0</code></li>
-        <li><code>capabilities_schema_version</code>: <code>1.1.0</code></li>
+        <li><code>version</code>: <code>0.3.1</code></li>
+        <li><code>capabilities_schema_version</code>: <code>1.2.0</code></li>
       </ul>
       <p><strong>Required Before Search</strong></p>
       <ul>
@@ -269,7 +271,20 @@ codex mcp get visa-jobs-mcp
         <li><code>jobs[].site</code></li>
         <li><code>jobs[].date_posted</code></li>
         <li><code>jobs[].description_fetched</code></li>
+        <li><code>jobs[].description</code></li>
         <li><code>jobs[].description_excerpt</code></li>
+        <li><code>jobs[].salary_text</code></li>
+        <li><code>jobs[].salary_currency</code></li>
+        <li><code>jobs[].salary_interval</code></li>
+        <li><code>jobs[].salary_min_amount</code></li>
+        <li><code>jobs[].salary_max_amount</code></li>
+        <li><code>jobs[].salary_source</code></li>
+        <li><code>jobs[].job_type</code></li>
+        <li><code>jobs[].job_level</code></li>
+        <li><code>jobs[].company_industry</code></li>
+        <li><code>jobs[].job_function</code></li>
+        <li><code>jobs[].job_url_direct</code></li>
+        <li><code>jobs[].is_remote</code></li>
         <li><code>jobs[].employer_contacts</code></li>
         <li><code>jobs[].visa_counts</code></li>
         <li><code>jobs[].visas_sponsored</code></li>
@@ -296,7 +311,7 @@ codex mcp get visa-jobs-mcp
         <summary>Raw Capabilities JSON</summary>
         <pre><code>
 {
-  &quot;capabilities_schema_version&quot;: &quot;1.1.0&quot;,
+  &quot;capabilities_schema_version&quot;: &quot;1.2.0&quot;,
   &quot;confidence_model_version&quot;: &quot;v1.1.0-rules-go&quot;,
   &quot;defaults&quot;: {
     &quot;dataset_stale_after_days&quot;: 30,
@@ -392,7 +407,20 @@ codex mcp get visa-jobs-mcp
     &quot;jobs[].site&quot;,
     &quot;jobs[].date_posted&quot;,
     &quot;jobs[].description_fetched&quot;,
+    &quot;jobs[].description&quot;,
     &quot;jobs[].description_excerpt&quot;,
+    &quot;jobs[].salary_text&quot;,
+    &quot;jobs[].salary_currency&quot;,
+    &quot;jobs[].salary_interval&quot;,
+    &quot;jobs[].salary_min_amount&quot;,
+    &quot;jobs[].salary_max_amount&quot;,
+    &quot;jobs[].salary_source&quot;,
+    &quot;jobs[].job_type&quot;,
+    &quot;jobs[].job_level&quot;,
+    &quot;jobs[].company_industry&quot;,
+    &quot;jobs[].job_function&quot;,
+    &quot;jobs[].job_url_direct&quot;,
+    &quot;jobs[].is_remote&quot;,
     &quot;jobs[].employer_contacts&quot;,
     &quot;jobs[].visa_counts&quot;,
     &quot;jobs[].visas_sponsored&quot;,
@@ -674,7 +702,7 @@ codex mcp get visa-jobs-mcp
       &quot;required_inputs&quot;: []
     }
   ],
-  &quot;version&quot;: &quot;0.3.0&quot;
+  &quot;version&quot;: &quot;0.3.1&quot;
 }
         </code></pre>
       </details>

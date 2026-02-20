@@ -150,6 +150,12 @@ func executeSearchQuery(
 
 		descriptionText := ""
 		fetchedDescription := false
+		jobType := raw.JobType
+		jobLevel := raw.JobLevel
+		companyIndustry := raw.CompanyIndustry
+		jobFunction := raw.JobFunction
+		jobURLDirect := raw.JobURLDirect
+		isRemote := raw.IsRemote
 		needsDescription := query.RequireDescriptionSignal || desiredCount == 0
 		if needsDescription {
 			canFetchDescription := descriptionFetches < descriptionFetchLimit && time.Now().Before(descriptionDeadline)
@@ -161,13 +167,31 @@ func executeSearchQuery(
 						"accepted_jobs":           len(accepted),
 					})
 				}
-				text, fetchErr := client.FetchJobDescription(raw.JobURL, isCancelled)
+				details, fetchErr := client.FetchJobDetails(raw.JobURL, raw.Title, raw.Location, isCancelled)
 				if errors.Is(fetchErr, errSearchRunCancelled) {
 					return nil, nil, "", errSearchRunCancelled
 				}
 				if fetchErr == nil {
-					descriptionText = text
+					descriptionText = details.Description
 					fetchedDescription = descriptionText != ""
+					if normalizeWhitespace(details.JobType) != "" {
+						jobType = details.JobType
+					}
+					if normalizeWhitespace(details.JobLevel) != "" {
+						jobLevel = details.JobLevel
+					}
+					if normalizeWhitespace(details.CompanyIndustry) != "" {
+						companyIndustry = details.CompanyIndustry
+					}
+					if normalizeWhitespace(details.JobFunction) != "" {
+						jobFunction = details.JobFunction
+					}
+					if normalizeWhitespace(details.JobURLDirect) != "" {
+						jobURLDirect = details.JobURLDirect
+					}
+					if details.IsRemote != nil {
+						isRemote = details.IsRemote
+					}
 				}
 				descriptionFetches++
 				stats.DescriptionFetches = descriptionFetches
@@ -214,6 +238,9 @@ func executeSearchQuery(
 				guidance = fmt.Sprintf("Prioritize outreach to %s %s after applying.", name, email)
 			}
 		}
+		if isRemote == nil {
+			isRemote = boolPtr(detectLinkedInRemote(raw.Title, raw.Location, descriptionText))
+		}
 
 		accepted = append(accepted, map[string]any{
 			"job_url":             raw.JobURL,
@@ -223,12 +250,25 @@ func executeSearchQuery(
 			"site":                "linkedin",
 			"date_posted":         raw.DatePosted,
 			"description_fetched": fetchedDescription,
+			"description":         optionalString(descriptionText),
 			"description_excerpt": func() string {
 				if len(descriptionText) > 280 {
 					return descriptionText[:280]
 				}
 				return descriptionText
 			}(),
+			"salary_text":              optionalString(raw.SalaryText),
+			"salary_currency":          optionalString(raw.SalaryCurrency),
+			"salary_interval":          optionalString(raw.SalaryInterval),
+			"salary_min_amount":        optionalInt(raw.SalaryMin),
+			"salary_max_amount":        optionalInt(raw.SalaryMax),
+			"salary_source":            optionalString(raw.SalarySource),
+			"job_type":                 optionalString(jobType),
+			"job_level":                optionalString(jobLevel),
+			"company_industry":         optionalString(companyIndustry),
+			"job_function":             optionalString(jobFunction),
+			"job_url_direct":           optionalString(jobURLDirect),
+			"is_remote":                optionalBool(isRemote),
 			"employer_contacts":        contacts,
 			"visa_counts":              visaCounts,
 			"visas_sponsored":          visasSponsored,
@@ -362,4 +402,26 @@ func executeSearchQuery(
 		"returned_jobs": len(page),
 	})
 	return response, statsMap, sessionID, nil
+}
+
+func optionalString(value string) any {
+	clean := normalizeWhitespace(value)
+	if clean == "" {
+		return nil
+	}
+	return clean
+}
+
+func optionalInt(value *int) any {
+	if value == nil {
+		return nil
+	}
+	return *value
+}
+
+func optionalBool(value *bool) any {
+	if value == nil {
+		return nil
+	}
+	return *value
 }

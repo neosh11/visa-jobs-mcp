@@ -1,5 +1,5 @@
 {
-  "capabilities_schema_version": "1.1.0",
+  "capabilities_schema_version": "1.2.0",
   "confidence_model_version": "v1.1.0-rules-go",
   "defaults": {
     "dataset_stale_after_days": 30,
@@ -95,7 +95,20 @@
     "jobs[].site",
     "jobs[].date_posted",
     "jobs[].description_fetched",
+    "jobs[].description",
     "jobs[].description_excerpt",
+    "jobs[].salary_text",
+    "jobs[].salary_currency",
+    "jobs[].salary_interval",
+    "jobs[].salary_min_amount",
+    "jobs[].salary_max_amount",
+    "jobs[].salary_source",
+    "jobs[].job_type",
+    "jobs[].job_level",
+    "jobs[].company_industry",
+    "jobs[].job_function",
+    "jobs[].job_url_direct",
+    "jobs[].is_remote",
     "jobs[].employer_contacts",
     "jobs[].visa_counts",
     "jobs[].visas_sponsored",
@@ -377,5 +390,5 @@
       "required_inputs": []
     }
   ],
-  "version": "0.3.0"
+  "version": "0.3.1"
 }

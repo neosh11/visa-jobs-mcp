@@ -37,17 +37,43 @@ func normalizeSavedJob(raw any) (map[string]any, bool) {
 	if !ok || id < 1 {
 		return nil, false
 	}
+	salaryMin := any(nil)
+	if value, ok := intFromAny(item["salary_min_amount"]); ok {
+		salaryMin = value
+	}
+	salaryMax := any(nil)
+	if value, ok := intFromAny(item["salary_max_amount"]); ok {
+		salaryMax = value
+	}
+	isRemote := any(nil)
+	if value, ok := boolFromAny(item["is_remote"]); ok {
+		isRemote = value
+	}
 	return map[string]any{
-		"id":                id,
-		"job_url":           getString(item, "job_url"),
-		"title":             getString(item, "title"),
-		"company":           getString(item, "company"),
-		"location":          getString(item, "location"),
-		"site":              getString(item, "site"),
-		"note":              getString(item, "note"),
-		"source_session_id": getString(item, "source_session_id"),
-		"saved_at_utc":      getString(item, "saved_at_utc"),
-		"updated_at_utc":    getString(item, "updated_at_utc"),
+		"id":                  id,
+		"job_url":             getString(item, "job_url"),
+		"title":               getString(item, "title"),
+		"company":             getString(item, "company"),
+		"location":            getString(item, "location"),
+		"site":                getString(item, "site"),
+		"description":         getString(item, "description"),
+		"description_excerpt": getString(item, "description_excerpt"),
+		"salary_text":         getString(item, "salary_text"),
+		"salary_currency":     getString(item, "salary_currency"),
+		"salary_interval":     getString(item, "salary_interval"),
+		"salary_min_amount":   salaryMin,
+		"salary_max_amount":   salaryMax,
+		"salary_source":       getString(item, "salary_source"),
+		"job_type":            getString(item, "job_type"),
+		"job_level":           getString(item, "job_level"),
+		"company_industry":    getString(item, "company_industry"),
+		"job_function":        getString(item, "job_function"),
+		"job_url_direct":      getString(item, "job_url_direct"),
+		"is_remote":           isRemote,
+		"note":                getString(item, "note"),
+		"source_session_id":   getString(item, "source_session_id"),
+		"saved_at_utc":        getString(item, "saved_at_utc"),
+		"updated_at_utc":      getString(item, "updated_at_utc"),
 	}, true
 }
 

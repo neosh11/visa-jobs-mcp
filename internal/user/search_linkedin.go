@@ -74,36 +74,205 @@ func parseLinkedInListHTML(html string) ([]linkedInJob, error) {
 		title := firstNonEmptyText(card, "h3.base-search-card__title", "span.sr-only")
 		company := strings.TrimSpace(card.Find("h4.base-search-card__subtitle").Text())
 		location := strings.TrimSpace(card.Find("span.job-search-card__location").First().Text())
+		compensationText := normalizeWhitespace(firstNonEmptyText(card, "span.job-search-card__salary-info"))
+		compensation, hasCompensation := parseCompensation(compensationText)
 		datePosted := ""
 		if dateNode := card.Find("time").First(); dateNode != nil {
 			if datetimeValue, ok := dateNode.Attr("datetime"); ok {
 				datePosted = strings.TrimSpace(datetimeValue)
 			}
 		}
-		out = append(out, linkedInJob{
+		job := linkedInJob{
 			JobURL:     jobURL,
 			Title:      title,
 			Company:    company,
 			Location:   location,
 			Site:       "linkedin",
 			DatePosted: datePosted,
-		})
+		}
+		if hasCompensation {
+			job.SalaryText = compensation.Text
+			job.SalaryCurrency = compensation.Currency
+			job.SalaryInterval = compensation.Interval
+			job.SalaryMin = compensation.MinAmount
+			job.SalaryMax = compensation.MaxAmount
+			job.SalarySource = "listing_card"
+		}
+		out = append(out, job)
 	})
 	return out, nil
 }
 
-func parseLinkedInDescriptionHTML(html string) string {
+func parseLinkedInJobDetailsHTML(html, title, location string) linkedInJobDetails {
 	doc, err := goquery.NewDocumentFromReader(strings.NewReader(html))
 	if err != nil {
-		return ""
+		isRemote := detectLinkedInRemote(title, location, "")
+		return linkedInJobDetails{IsRemote: boolPtr(isRemote)}
 	}
+	details := linkedInJobDetails{
+		Description: parseLinkedInDescriptionText(doc),
+	}
+
+	criteria := parseLinkedInCriteriaValues(doc)
+	details.JobType = criteria["employment type"]
+	details.JobLevel = criteria["seniority level"]
+	details.CompanyIndustry = criteria["industries"]
+	details.JobFunction = criteria["job function"]
+	details.JobURLDirect = parseLinkedInDirectApplyURL(doc)
+
+	isRemote := detectLinkedInRemote(title, location, details.Description)
+	details.IsRemote = boolPtr(isRemote)
+	return details
+}
+
+func parseLinkedInDescriptionText(doc *goquery.Document) string {
 	markup := doc.Find("div.show-more-less-html__markup").First()
 	if markup == nil || markup.Length() == 0 {
 		markup = doc.Find("div[class*='show-more-less-html__markup']").First()
 	}
-	text := strings.TrimSpace(markup.Text())
-	text = strings.Join(strings.Fields(text), " ")
-	return text
+	return normalizeWhitespace(markup.Text())
+}
+
+func parseLinkedInCriteriaValues(doc *goquery.Document) map[string]string {
+	out := map[string]string{}
+
+	doc.Find("li.description__job-criteria-item").Each(func(_ int, item *goquery.Selection) {
+		label := normalizeCriteriaKey(item.Find("h3").First().Text())
+		value := normalizeWhitespace(item.Find("span.description__job-criteria-text").First().Text())
+		if label == "" || value == "" {
+			return
+		}
+		out[label] = value
+	})
+	if len(out) > 0 {
+		return out
+	}
+
+	doc.Find("h3.description__job-criteria-subheader").Each(func(_ int, header *goquery.Selection) {
+		label := normalizeCriteriaKey(header.Text())
+		value := normalizeWhitespace(header.NextFiltered("span.description__job-criteria-text").First().Text())
+		if label == "" || value == "" {
+			return
+		}
+		out[label] = value
+	})
+	return out
+}
+
+func normalizeCriteriaKey(text string) string {
+	clean := strings.ToLower(normalizeWhitespace(text))
+	clean = strings.TrimSuffix(clean, ":")
+	return clean
+}
+
+func parseLinkedInDirectApplyURL(doc *goquery.Document) string {
+	if codeSelection := doc.Find("code#applyUrl").First(); codeSelection != nil && codeSelection.Length() > 0 {
+		if text := normalizeWhitespace(codeSelection.Text()); text != "" {
+			if direct := extractDirectApplyURL(text); direct != "" {
+				return direct
+			}
+		}
+		if htmlText, err := codeSelection.Html(); err == nil {
+			if direct := extractDirectApplyURL(htmlText); direct != "" {
+				return direct
+			}
+		}
+	}
+
+	var direct string
+	doc.Find("a[href]").EachWithBreak(func(_ int, anchor *goquery.Selection) bool {
+		href, ok := anchor.Attr("href")
+		if !ok {
+			return true
+		}
+		candidate := extractDirectApplyURL(href)
+		if candidate == "" {
+			return true
+		}
+		direct = candidate
+		return false
+	})
+	return direct
+}
+
+func extractDirectApplyURL(raw string) string {
+	clean := strings.TrimSpace(raw)
+	if clean == "" {
+		return ""
+	}
+	clean = strings.ReplaceAll(clean, `\u0026`, "&")
+	clean = strings.ReplaceAll(clean, "&amp;", "&")
+
+	if parsed, err := url.Parse(clean); err == nil {
+		if target := strings.TrimSpace(parsed.Query().Get("url")); target != "" {
+			if decoded, err := url.QueryUnescape(target); err == nil {
+				target = decoded
+			}
+			if normalized := normalizeExternalURL(target); normalized != "" {
+				return normalized
+			}
+		}
+	}
+
+	for _, prefix := range []string{"url=", "?url=", "&url="} {
+		if idx := strings.Index(clean, prefix); idx >= 0 {
+			target := clean[idx+len(prefix):]
+			for _, separator := range []string{"&", "\"", "'", "<", ">"} {
+				if end := strings.Index(target, separator); end >= 0 {
+					target = target[:end]
+				}
+			}
+			target = strings.TrimSpace(target)
+			if decoded, err := url.QueryUnescape(target); err == nil {
+				target = decoded
+			}
+			if normalized := normalizeExternalURL(target); normalized != "" {
+				return normalized
+			}
+		}
+	}
+	return normalizeExternalURL(clean)
+}
+
+func normalizeExternalURL(raw string) string {
+	clean := strings.TrimSpace(raw)
+	if clean == "" {
+		return ""
+	}
+	if strings.HasPrefix(clean, "//") {
+		clean = "https:" + clean
+	}
+	parsed, err := url.Parse(clean)
+	if err != nil {
+		return ""
+	}
+	if parsed.Scheme == "" || parsed.Host == "" {
+		return ""
+	}
+	host := strings.ToLower(parsed.Host)
+	if strings.Contains(host, "linkedin.com") {
+		if target := strings.TrimSpace(parsed.Query().Get("url")); target != "" {
+			if decoded, err := url.QueryUnescape(target); err == nil {
+				target = decoded
+			}
+			return normalizeExternalURL(target)
+		}
+		return ""
+	}
+	parsed.Fragment = ""
+	return parsed.String()
+}
+
+func detectLinkedInRemote(title, location, description string) bool {
+	text := strings.ToLower(strings.Join([]string{title, location, description}, " "))
+	return strings.Contains(text, "remote") ||
+		strings.Contains(text, "work from home") ||
+		strings.Contains(text, "wfh")
+}
+
+func boolPtr(value bool) *bool {
+	clone := value
+	return &clone
 }
 
 func isRateLimitStatus(code int) bool {
@@ -225,12 +394,13 @@ func (c *liveLinkedInClient) FetchSearchPage(query linkedInSearchQuery, isCancel
 	return parseLinkedInListHTML(body)
 }
 
-func (c *liveLinkedInClient) FetchJobDescription(jobURL string, isCancelled func() bool) (string, error) {
+func (c *liveLinkedInClient) FetchJobDetails(jobURL, title, location string, isCancelled func() bool) (linkedInJobDetails, error) {
 	resp, _, _, err := requestWithRateLimitBackoff(func() (*resty.Response, error) {
 		return c.httpClient.R().Get(jobURL)
 	}, isCancelled)
 	if err != nil {
-		return "", err
+		return linkedInJobDetails{}, err
 	}
-	return parseLinkedInDescriptionHTML(string(resp.Body())), nil
+	body := string(resp.Body())
+	return parseLinkedInJobDetailsHTML(body, title, location), nil
 }

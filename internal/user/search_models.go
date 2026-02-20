@@ -45,12 +45,34 @@ type companyDataset struct {
 }
 
 type linkedInJob struct {
-	JobURL     string
-	Title      string
-	Company    string
-	Location   string
-	Site       string
-	DatePosted string
+	JobURL          string
+	Title           string
+	Company         string
+	Location        string
+	Site            string
+	DatePosted      string
+	SalaryText      string
+	SalaryCurrency  string
+	SalaryInterval  string
+	SalaryMin       *int
+	SalaryMax       *int
+	SalarySource    string
+	IsRemote        *bool
+	JobType         string
+	JobLevel        string
+	CompanyIndustry string
+	JobFunction     string
+	JobURLDirect    string
+}
+
+type linkedInJobDetails struct {
+	Description     string
+	JobType         string
+	JobLevel        string
+	CompanyIndustry string
+	JobFunction     string
+	JobURLDirect    string
+	IsRemote        *bool
 }
 
 type linkedInSearchQuery struct {
@@ -62,7 +84,7 @@ type linkedInSearchQuery struct {
 
 type linkedInClient interface {
 	FetchSearchPage(query linkedInSearchQuery, isCancelled func() bool) ([]linkedInJob, error)
-	FetchJobDescription(jobURL string, isCancelled func() bool) (string, error)
+	FetchJobDetails(jobURL, title, location string, isCancelled func() bool) (linkedInJobDetails, error)
 }
 
 type searchQuery struct {

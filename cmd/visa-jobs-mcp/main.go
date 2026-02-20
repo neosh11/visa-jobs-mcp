@@ -8,7 +8,7 @@ import (
 	"github.com/neosh11/visa-jobs-mcp/internal/mcp"
 )
 
-var version = "0.3.0"
+var version = "0.3.1"
 
 func main() {
 	showVersion := flag.Bool("version", false, "show version and exit")

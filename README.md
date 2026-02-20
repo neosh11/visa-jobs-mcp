@@ -12,17 +12,29 @@ It is built for speed and practical outcomes:
 
 ## Get Started
 
-### 1. Install (recommended)
+### 1. Install on macOS (Homebrew)
 
 ```bash
 brew tap neosh11/visa-jobs-mcp
 brew install neosh11/visa-jobs-mcp/visa-jobs-mcp
 ```
 
+### 1b. Install on Windows (direct binary)
+
+1. Download the latest `windows-x86_64` release asset from [Releases](https://github.com/neosh11/visa-jobs-mcp/releases).
+2. Extract the archive.
+3. Put `visa-jobs-mcp.exe` somewhere on your `PATH`.
+
 ### 2. Register in Codex
 
 ```bash
 codex mcp add visa-jobs-mcp --env VISA_JOB_SITES=linkedin -- visa-jobs-mcp
+```
+
+Windows (PowerShell):
+
+```powershell
+codex mcp add visa-jobs-mcp --env VISA_JOB_SITES=linkedin -- visa-jobs-mcp.exe
 ```
 
 Verify:
@@ -112,8 +124,8 @@ Generated from `get_mcp_capabilities()` via `scripts/generate_contract_docs.py`.
 
 ### Server
 - `server`: `visa-jobs-mcp`
-- `version`: `0.3.0`
-- `capabilities_schema_version`: `1.1.0`
+- `version`: `0.3.1`
+- `capabilities_schema_version`: `1.2.0`
 - `confidence_model_version`: `v1.1.0-rules-go`
 
 ### Required Before Search
@@ -211,7 +223,20 @@ Generated from `get_mcp_capabilities()` via `scripts/generate_contract_docs.py`.
 - `jobs[].site`
 - `jobs[].date_posted`
 - `jobs[].description_fetched`
+- `jobs[].description`
 - `jobs[].description_excerpt`
+- `jobs[].salary_text`
+- `jobs[].salary_currency`
+- `jobs[].salary_interval`
+- `jobs[].salary_min_amount`
+- `jobs[].salary_max_amount`
+- `jobs[].salary_source`
+- `jobs[].job_type`
+- `jobs[].job_level`
+- `jobs[].company_industry`
+- `jobs[].job_function`
+- `jobs[].job_url_direct`
+- `jobs[].is_remote`
 - `jobs[].employer_contacts`
 - `jobs[].visa_counts`
 - `jobs[].visas_sponsored`
@@ -241,7 +266,7 @@ Generated from `get_mcp_capabilities()` via `scripts/generate_contract_docs.py`.
 
 ```json
 {
-  "capabilities_schema_version": "1.1.0",
+  "capabilities_schema_version": "1.2.0",
   "confidence_model_version": "v1.1.0-rules-go",
   "defaults": {
     "dataset_stale_after_days": 30,
@@ -337,7 +362,20 @@ Generated from `get_mcp_capabilities()` via `scripts/generate_contract_docs.py`.
     "jobs[].site",
     "jobs[].date_posted",
     "jobs[].description_fetched",
+    "jobs[].description",
     "jobs[].description_excerpt",
+    "jobs[].salary_text",
+    "jobs[].salary_currency",
+    "jobs[].salary_interval",
+    "jobs[].salary_min_amount",
+    "jobs[].salary_max_amount",
+    "jobs[].salary_source",
+    "jobs[].job_type",
+    "jobs[].job_level",
+    "jobs[].company_industry",
+    "jobs[].job_function",
+    "jobs[].job_url_direct",
+    "jobs[].is_remote",
     "jobs[].employer_contacts",
     "jobs[].visa_counts",
     "jobs[].visas_sponsored",
@@ -619,7 +657,7 @@ Generated from `get_mcp_capabilities()` via `scripts/generate_contract_docs.py`.
       "required_inputs": []
     }
   ],
-  "version": "0.3.0"
+  "version": "0.3.1"
 }
 ```
 

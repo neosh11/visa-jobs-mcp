@@ -33,6 +33,62 @@ func SaveJobForLater(args map[string]any) (map[string]any, error) {
 	if site == "" {
 		site = getString(resolved, "site")
 	}
+	description := getString(args, "description")
+	if description == "" {
+		description = getString(resolved, "description")
+	}
+	descriptionExcerpt := getString(args, "description_excerpt")
+	if descriptionExcerpt == "" {
+		descriptionExcerpt = getString(resolved, "description_excerpt")
+	}
+	salaryText := getString(args, "salary_text")
+	if salaryText == "" {
+		salaryText = getString(resolved, "salary_text")
+	}
+	salaryCurrency := getString(args, "salary_currency")
+	if salaryCurrency == "" {
+		salaryCurrency = getString(resolved, "salary_currency")
+	}
+	salaryInterval := getString(args, "salary_interval")
+	if salaryInterval == "" {
+		salaryInterval = getString(resolved, "salary_interval")
+	}
+	salarySource := getString(args, "salary_source")
+	if salarySource == "" {
+		salarySource = getString(resolved, "salary_source")
+	}
+	jobType := getString(args, "job_type")
+	if jobType == "" {
+		jobType = getString(resolved, "job_type")
+	}
+	jobLevel := getString(args, "job_level")
+	if jobLevel == "" {
+		jobLevel = getString(resolved, "job_level")
+	}
+	companyIndustry := getString(args, "company_industry")
+	if companyIndustry == "" {
+		companyIndustry = getString(resolved, "company_industry")
+	}
+	jobFunction := getString(args, "job_function")
+	if jobFunction == "" {
+		jobFunction = getString(resolved, "job_function")
+	}
+	jobURLDirect := getString(args, "job_url_direct")
+	if jobURLDirect == "" {
+		jobURLDirect = getString(resolved, "job_url_direct")
+	}
+	salaryMin := args["salary_min_amount"]
+	if salaryMin == nil {
+		salaryMin = resolved["salary_min_amount"]
+	}
+	salaryMax := args["salary_max_amount"]
+	if salaryMax == nil {
+		salaryMax = resolved["salary_max_amount"]
+	}
+	isRemote := args["is_remote"]
+	if isRemote == nil {
+		isRemote = resolved["is_remote"]
+	}
 	note := getString(args, "note")
 	sourceSessionID := getString(args, "source_session_id")
 	if sourceSessionID == "" {
@@ -61,6 +117,48 @@ func SaveJobForLater(args map[string]any) (map[string]any, error) {
 		if site != "" {
 			row["site"] = site
 		}
+		if description != "" {
+			row["description"] = description
+		}
+		if descriptionExcerpt != "" {
+			row["description_excerpt"] = descriptionExcerpt
+		}
+		if salaryText != "" {
+			row["salary_text"] = salaryText
+		}
+		if salaryCurrency != "" {
+			row["salary_currency"] = salaryCurrency
+		}
+		if salaryInterval != "" {
+			row["salary_interval"] = salaryInterval
+		}
+		if salarySource != "" {
+			row["salary_source"] = salarySource
+		}
+		if salaryMin != nil {
+			row["salary_min_amount"] = salaryMin
+		}
+		if salaryMax != nil {
+			row["salary_max_amount"] = salaryMax
+		}
+		if jobType != "" {
+			row["job_type"] = jobType
+		}
+		if jobLevel != "" {
+			row["job_level"] = jobLevel
+		}
+		if companyIndustry != "" {
+			row["company_industry"] = companyIndustry
+		}
+		if jobFunction != "" {
+			row["job_function"] = jobFunction
+		}
+		if jobURLDirect != "" {
+			row["job_url_direct"] = jobURLDirect
+		}
+		if isRemote != nil {
+			row["is_remote"] = isRemote
+		}
 		if note != "" {
 			row["note"] = note
 		}
@@ -75,16 +173,30 @@ func SaveJobForLater(args map[string]any) (map[string]any, error) {
 	if savedJob == nil {
 		nextID, _ := intFromAny(entry["next_id"])
 		savedJob = map[string]any{
-			"id":                nextID,
-			"job_url":           cleanURL,
-			"title":             title,
-			"company":           company,
-			"location":          location,
-			"site":              site,
-			"note":              note,
-			"source_session_id": sourceSessionID,
-			"saved_at_utc":      now,
-			"updated_at_utc":    now,
+			"id":                  nextID,
+			"job_url":             cleanURL,
+			"title":               title,
+			"company":             company,
+			"location":            location,
+			"site":                site,
+			"description":         description,
+			"description_excerpt": descriptionExcerpt,
+			"salary_text":         salaryText,
+			"salary_currency":     salaryCurrency,
+			"salary_interval":     salaryInterval,
+			"salary_min_amount":   salaryMin,
+			"salary_max_amount":   salaryMax,
+			"salary_source":       salarySource,
+			"job_type":            jobType,
+			"job_level":           jobLevel,
+			"company_industry":    companyIndustry,
+			"job_function":        jobFunction,
+			"job_url_direct":      jobURLDirect,
+			"is_remote":           isRemote,
+			"note":                note,
+			"source_session_id":   sourceSessionID,
+			"saved_at_utc":        now,
+			"updated_at_utc":      now,
 		}
 		entry["jobs"] = append(jobs, savedJob)
 		entry["next_id"] = nextID + 1
