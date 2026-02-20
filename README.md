@@ -87,9 +87,9 @@ Generated from `get_mcp_capabilities()` via `scripts/generate_contract_docs.py`.
 
 ### Server
 - `server`: `visa-jobs-mcp`
-- `version`: `0.2.10`
+- `version`: `0.3.0-dev`
 - `capabilities_schema_version`: `1.1.0`
-- `confidence_model_version`: `v1.1.0-rules`
+- `confidence_model_version`: `v1.1.0-rules-go`
 
 ### Required Before Search
 - `tool`: `set_user_preferences`
@@ -133,6 +133,7 @@ Generated from `get_mcp_capabilities()` via `scripts/generate_contract_docs.py`.
 ### Tools
 | Tool | Description | Required Inputs | Optional Inputs |
 |---|---|---|---|
+| `get_mcp_capabilities` | Return MCP capabilities, tools, and contracts for agent self-discovery. | - | - |
 | `set_user_preferences` | Save the user's visa preferences required before search. | `user_id`, `preferred_visa_types` | - |
 | `set_user_constraints` | Save urgency and work-mode constraints used for personalized guidance. | `user_id` | - |
 | `get_user_preferences` | Fetch the saved user preferences and constraints. | `user_id` | - |
@@ -170,8 +171,22 @@ Generated from `get_mcp_capabilities()` via `scripts/generate_contract_docs.py`.
 | `refresh_company_dataset_cache` | Clear and reload in-memory company dataset cache. | - | - |
 
 ### Search Response Fields
+- `run`
+- `status`
+- `stats`
+- `guidance`
+- `dataset_freshness`
+- `pagination`
+- `recovery_suggestions`
 - `jobs[].result_id`
 - `jobs[].job_url`
+- `jobs[].title`
+- `jobs[].company`
+- `jobs[].location`
+- `jobs[].site`
+- `jobs[].date_posted`
+- `jobs[].description_fetched`
+- `jobs[].description_excerpt`
 - `jobs[].employer_contacts`
 - `jobs[].visa_counts`
 - `jobs[].visas_sponsored`
@@ -179,19 +194,7 @@ Generated from `get_mcp_capabilities()` via `scripts/generate_contract_docs.py`.
 - `jobs[].eligibility_reasons`
 - `jobs[].confidence_score`
 - `jobs[].confidence_model_version`
-- `jobs[].contactability_score`
-- `jobs[].matched_via_company_dataset`
-- `jobs[].matched_via_job_description`
-- `jobs[].matches_user_visa_preferences`
-- `search_progress`
-- `feedback_summary`
-- `personalization_notes`
-- `search_session`
-- `stats`
-- `agent_guidance`
-- `pagination`
-- `dataset_freshness`
-- `recovery_suggestions`
+- `jobs[].agent_guidance`
 
 ### Paths
 - `dataset_default`: `data/companies.csv`
@@ -214,7 +217,7 @@ Generated from `get_mcp_capabilities()` via `scripts/generate_contract_docs.py`.
 ```json
 {
   "capabilities_schema_version": "1.1.0",
-  "confidence_model_version": "v1.1.0-rules",
+  "confidence_model_version": "v1.1.0-rules-go",
   "defaults": {
     "dataset_stale_after_days": 30,
     "job_db_path": "data/app/visa_jobs.db",
@@ -294,8 +297,22 @@ Generated from `get_mcp_capabilities()` via `scripts/generate_contract_docs.py`.
     "tool": "set_user_preferences"
   },
   "search_response_fields_for_agents": [
+    "run",
+    "status",
+    "stats",
+    "guidance",
+    "dataset_freshness",
+    "pagination",
+    "recovery_suggestions",
     "jobs[].result_id",
     "jobs[].job_url",
+    "jobs[].title",
+    "jobs[].company",
+    "jobs[].location",
+    "jobs[].site",
+    "jobs[].date_posted",
+    "jobs[].description_fetched",
+    "jobs[].description_excerpt",
     "jobs[].employer_contacts",
     "jobs[].visa_counts",
     "jobs[].visas_sponsored",
@@ -303,22 +320,15 @@ Generated from `get_mcp_capabilities()` via `scripts/generate_contract_docs.py`.
     "jobs[].eligibility_reasons",
     "jobs[].confidence_score",
     "jobs[].confidence_model_version",
-    "jobs[].contactability_score",
-    "jobs[].matched_via_company_dataset",
-    "jobs[].matched_via_job_description",
-    "jobs[].matches_user_visa_preferences",
-    "search_progress",
-    "feedback_summary",
-    "personalization_notes",
-    "search_session",
-    "stats",
-    "agent_guidance",
-    "pagination",
-    "dataset_freshness",
-    "recovery_suggestions"
+    "jobs[].agent_guidance"
   ],
   "server": "visa-jobs-mcp",
   "tools": [
+    {
+      "description": "Return MCP capabilities, tools, and contracts for agent self-discovery.",
+      "name": "get_mcp_capabilities",
+      "required_inputs": []
+    },
     {
       "description": "Save the user's visa preferences required before search.",
       "name": "set_user_preferences",
@@ -584,7 +594,7 @@ Generated from `get_mcp_capabilities()` via `scripts/generate_contract_docs.py`.
       "required_inputs": []
     }
   ],
-  "version": "0.2.10"
+  "version": "0.3.0-dev"
 }
 ```
 

@@ -22,6 +22,8 @@ var (
 	sharedToolMutex sync.Mutex
 )
 
+var Version = "0.3.0-dev"
+
 var implementedToolHandlers = map[string]toolHandler{
 	"get_mcp_capabilities":                getMCPCapabilities,
 	"set_user_preferences":                user.SetUserPreferences,
@@ -88,7 +90,7 @@ func newServer() (*mcpSDK.Server, error) {
 	if value, ok := caps["server"].(string); ok && value != "" {
 		serverName = value
 	}
-	serverVersion := "0.1.0-dev"
+	serverVersion := Version
 	if value, ok := caps["version"].(string); ok && value != "" {
 		serverVersion = value
 	}
@@ -162,6 +164,7 @@ func getMCPCapabilities(_ map[string]any) (map[string]any, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to load capabilities: %w", err)
 	}
+	payload["version"] = Version
 	return payload, nil
 }
 

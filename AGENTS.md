@@ -42,6 +42,7 @@ Code guide for contributors and coding agents working in `visa-jobs-mcp`.
 - Keep tool argument schemas in sync with contract fields via `internal/mcp/input_schema.go`.
 - If tool descriptions or shape change, regenerate docs:
   - `python3 scripts/generate_contract_docs.py`
+  - The generator reads from `internal/contract/contract.json` (not Python server runtime).
 
 ## Concurrency model
 - MCP SDK can process concurrent requests; keep handlers safe for concurrent execution.

@@ -4,7 +4,6 @@ from __future__ import annotations
 import html
 import json
 import re
-import sys
 import argparse
 from pathlib import Path
 from typing import Any
@@ -19,13 +18,12 @@ def _repo_root() -> Path:
 
 def _load_capabilities() -> dict[str, Any]:
     root = _repo_root()
-    src = root / "src"
-    sys.path.insert(0, str(src))
-    from visa_jobs_mcp import server
-
-    caps = server.get_mcp_capabilities()
+    contract_path = root / "internal" / "contract" / "contract.json"
+    if not contract_path.exists():
+        raise RuntimeError(f"Contract file not found: {contract_path}")
+    caps = json.loads(contract_path.read_text(encoding="utf-8"))
     if not isinstance(caps, dict):
-        raise RuntimeError("get_mcp_capabilities() must return a dict")
+        raise RuntimeError("contract.json must decode into a JSON object")
     return caps
 
 

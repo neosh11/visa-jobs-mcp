@@ -78,7 +78,7 @@ RELEASE_ROOT="$ROOT_DIR/dist/release"
 rm -rf "$BUILD_ROOT" "$DIST_ROOT" "$PACKAGE_ROOT" "$RELEASE_ROOT"
 mkdir -p "$BUILD_ROOT" "$DIST_ROOT" "$PACKAGE_ROOT/data" "$RELEASE_ROOT"
 
-LDFLAGS="-s -w -X main.version=${VERSION}"
+LDFLAGS="-s -w -X main.version=${VERSION} -X github.com/neosh11/visa-jobs-mcp/internal/mcp.Version=${VERSION}"
 CGO_ENABLED=0 GOOS="${GOOS}" GOARCH="${GOARCH}" \
   "${GO_BIN}" build -trimpath -ldflags "${LDFLAGS}" -o "$DIST_ROOT/visa-jobs-mcp" ./cmd/visa-jobs-mcp
 

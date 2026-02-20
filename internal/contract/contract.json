@@ -1,6 +1,6 @@
 {
   "capabilities_schema_version": "1.1.0",
-  "confidence_model_version": "v1.1.0-rules",
+  "confidence_model_version": "v1.1.0-rules-go",
   "defaults": {
     "dataset_stale_after_days": 30,
     "job_db_path": "data/app/visa_jobs.db",
@@ -80,8 +80,22 @@
     "tool": "set_user_preferences"
   },
   "search_response_fields_for_agents": [
+    "run",
+    "status",
+    "stats",
+    "guidance",
+    "dataset_freshness",
+    "pagination",
+    "recovery_suggestions",
     "jobs[].result_id",
     "jobs[].job_url",
+    "jobs[].title",
+    "jobs[].company",
+    "jobs[].location",
+    "jobs[].site",
+    "jobs[].date_posted",
+    "jobs[].description_fetched",
+    "jobs[].description_excerpt",
     "jobs[].employer_contacts",
     "jobs[].visa_counts",
     "jobs[].visas_sponsored",
@@ -89,22 +103,15 @@
     "jobs[].eligibility_reasons",
     "jobs[].confidence_score",
     "jobs[].confidence_model_version",
-    "jobs[].contactability_score",
-    "jobs[].matched_via_company_dataset",
-    "jobs[].matched_via_job_description",
-    "jobs[].matches_user_visa_preferences",
-    "search_progress",
-    "feedback_summary",
-    "personalization_notes",
-    "search_session",
-    "stats",
-    "agent_guidance",
-    "pagination",
-    "dataset_freshness",
-    "recovery_suggestions"
+    "jobs[].agent_guidance"
   ],
   "server": "visa-jobs-mcp",
   "tools": [
+    {
+      "name": "get_mcp_capabilities",
+      "description": "Return MCP capabilities, tools, and contracts for agent self-discovery.",
+      "required_inputs": []
+    },
     {
       "description": "Save the user's visa preferences required before search.",
       "name": "set_user_preferences",
@@ -370,5 +377,5 @@
       "required_inputs": []
     }
   ],
-  "version": "0.2.10"
+  "version": "0.3.0-dev"
 }

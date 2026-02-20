@@ -29,6 +29,9 @@ func TestInitializeAndListTools(t *testing.T) {
 	if initResult.ServerInfo.Name != "visa-jobs-mcp" {
 		t.Fatalf("unexpected server name: %q", initResult.ServerInfo.Name)
 	}
+	if got := strings.TrimSpace(initResult.ServerInfo.Version); got == "" {
+		t.Fatalf("expected non-empty server version")
+	}
 
 	tools, err := session.ListTools(context.Background(), &mcpSDK.ListToolsParams{})
 	if err != nil {
@@ -69,6 +72,26 @@ func TestInitializeAndListTools(t *testing.T) {
 	}
 	if !foundSetPrefsSchema {
 		t.Fatal("expected set_user_preferences in tools/list")
+	}
+}
+
+func TestCapabilitiesVersionUsesRuntimeVersion(t *testing.T) {
+	_, session, cleanup := connectTestSession(t)
+	defer cleanup()
+
+	result, err := session.CallTool(context.Background(), &mcpSDK.CallToolParams{
+		Name:      "get_mcp_capabilities",
+		Arguments: map[string]any{},
+	})
+	if err != nil {
+		t.Fatalf("get_mcp_capabilities call failed: %v", err)
+	}
+	if result.IsError {
+		t.Fatalf("get_mcp_capabilities returned tool error: %#v", result)
+	}
+	structured, _ := result.StructuredContent.(map[string]any)
+	if got := getStringFromAnyMap(structured, "version"); got != Version {
+		t.Fatalf("expected version=%q, got %q", Version, got)
 	}
 }
 
