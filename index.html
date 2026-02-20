@@ -5,9 +5,74 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Visa Jobs MCP</title>
   <meta name="description" content="Free, private, agent-native MCP server for visa-targeted job search.">
+  <style>
+    :root {
+      --bg-dark: #111213;
+      --fg-light: #d6d6d6;
+      --matrix-green: #39ff14;
+    }
+
+    body {
+      padding: 0 10px;
+      margin: 50px auto;
+      max-width: 650px;
+      background-color: var(--bg-dark);
+      color: var(--fg-light);
+      font-family:
+        "SF Mono", "SFMono-Regular", ui-monospace,
+        Menlo, Consolas, "Liberation Mono", monospace;
+
+      font-size: 0.9rem;
+      line-height: 1.4;
+      -webkit-font-smoothing: antialiased;
+    }
+
+    #maincontent {
+      max-width: 42em;
+      margin: 15px auto;
+    }
+
+    a {
+      color: var(--matrix-green);
+      text-decoration: none;
+    }
+
+    a:hover,
+    a:focus {
+      text-decoration: underline;
+    }
+
+    h2 {
+      margin-bottom: 2px;
+    }
+
+    pre {
+      margin: 8px 0 14px 0;
+      padding: 10px 12px;
+      border: 1px solid #2a2d2f;
+      background: #17191b;
+      border-radius: 6px;
+      overflow-x: auto;
+    }
+
+    pre code {
+      color: var(--fg-light);
+      background: transparent;
+      border: 0;
+      border-radius: 0;
+      padding: 0;
+    }
+
+    code {
+      background: #1a1c1e;
+      border: 1px solid #2a2d2f;
+      border-radius: 4px;
+      padding: 1px 5px;
+    }
+  </style>
 </head>
 <body>
-  <main>
+  <div id="maincontent" style="margin-top: 70px">
     <h1>Visa Jobs MCP</h1>
     <p><strong>Always free.</strong> <strong>Completely private.</strong> <strong>Built for agents.</strong></p>
     <p>
@@ -78,6 +143,6 @@ codex mcp get visa-jobs-mcp
       ·
       <a href="https://github.com/neosh11/homebrew-visa-jobs-mcp">Homebrew Tap</a>
     </p>
-  </main>
+  </div>
 </body>
 </html>
