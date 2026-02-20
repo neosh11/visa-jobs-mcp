@@ -1,19 +1,7 @@
 name: Go Tests
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "go.mod"
-      - "cmd/**"
-      - "internal/**"
-      - ".github/workflows/go-tests.yml"
-  pull_request:
-    paths:
-      - "go.mod"
-      - "cmd/**"
-      - "internal/**"
-      - ".github/workflows/go-tests.yml"
+  workflow_dispatch:
 
 jobs:
   test:

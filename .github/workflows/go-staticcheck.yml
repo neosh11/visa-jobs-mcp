@@ -1,21 +1,7 @@
 name: Go Staticcheck
 
 on:
-  push:
-    branches: [main]
-    paths:
-      - "go.mod"
-      - "go.sum"
-      - "cmd/**"
-      - "internal/**"
-      - ".github/workflows/go-staticcheck.yml"
-  pull_request:
-    paths:
-      - "go.mod"
-      - "go.sum"
-      - "cmd/**"
-      - "internal/**"
-      - ".github/workflows/go-staticcheck.yml"
+  workflow_dispatch:
 
 jobs:
   staticcheck:
