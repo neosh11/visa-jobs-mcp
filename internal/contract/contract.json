@@ -39,7 +39,8 @@
     "rate_limit_backoff_retries": true,
     "saved_jobs_local_persistence": true,
     "search_sessions_local_persistence": true,
-    "strict_user_visa_match": true,
+    "strict_user_visa_match": false,
+    "visa_matching_optional": true,
     "strictness_modes_supported": [
       "balanced",
       "strict"
@@ -74,10 +75,9 @@
   },
   "required_before_search": {
     "required_fields": [
-      "user_id",
-      "preferred_visa_types"
+      "user_id"
     ],
-    "tool": "set_user_preferences"
+    "tool": "start_job_search"
   },
   "search_response_fields_for_agents": [
     "run",
@@ -126,7 +126,7 @@
       "required_inputs": []
     },
     {
-      "description": "Save the user's visa preferences required before search.",
+      "description": "Save the user's visa preferences for optional visa-specific matching.",
       "name": "set_user_preferences",
       "required_inputs": [
         "user_id",
@@ -339,6 +339,39 @@
       "name": "generate_outreach_message",
       "required_inputs": [
         "user_id"
+      ]
+    },
+    {
+      "description": "Start a background job search without requiring visa preferences.",
+      "name": "start_job_search",
+      "required_inputs": [
+        "location",
+        "job_title",
+        "user_id"
+      ]
+    },
+    {
+      "description": "Poll incremental progress/events for a background job search run.",
+      "name": "get_job_search_status",
+      "required_inputs": [
+        "user_id",
+        "run_id"
+      ]
+    },
+    {
+      "description": "Fetch current result page from a background job search run.",
+      "name": "get_job_search_results",
+      "required_inputs": [
+        "user_id",
+        "run_id"
+      ]
+    },
+    {
+      "description": "Request cancellation of an in-progress background job search run.",
+      "name": "cancel_job_search",
+      "required_inputs": [
+        "user_id",
+        "run_id"
       ]
     },
     {

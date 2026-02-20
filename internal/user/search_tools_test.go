@@ -72,6 +72,29 @@ func waitForTerminalRunStatus(t *testing.T, userID, runID string, timeout time.D
 	return nil
 }
 
+func waitForTerminalRunStatusGeneric(t *testing.T, userID, runID string, timeout time.Duration) map[string]any {
+	t.Helper()
+	deadline := time.Now().Add(timeout)
+	var latest map[string]any
+	for time.Now().Before(deadline) {
+		status, err := GetJobSearchStatus(map[string]any{
+			"user_id": userID,
+			"run_id":  runID,
+			"cursor":  0,
+		})
+		if err != nil {
+			t.Fatalf("GetJobSearchStatus failed: %v", err)
+		}
+		latest = status
+		if searchRunIsTerminal(getString(status, "status")) {
+			return status
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Fatalf("timeout waiting for terminal run status; latest=%v", latest)
+	return nil
+}
+
 func TestStartSearchAndFetchResults(t *testing.T) {
 	setupUserToolPaths(t)
 	root := t.TempDir()
@@ -364,4 +387,122 @@ func TestStartSearchDefaultsResultsWantedToFive(t *testing.T) {
 	if got := intOrZero(query["results_wanted"]); got != 5 {
 		t.Fatalf("expected default results_wanted=5, got %d", got)
 	}
+}
+
+func TestStartJobSearchWithoutVisaPreferences(t *testing.T) {
+	setupUserToolPaths(t)
+	root := t.TempDir()
+	datasetPath := filepath.Join(root, "companies.csv")
+	writeTestDataset(t, datasetPath)
+
+	originalFactory := linkedInClientFactory
+	defer func() {
+		linkedInClientFactory = originalFactory
+	}()
+	linkedInClientFactory = func() linkedInClient {
+		return &fakeLinkedInClient{
+			pages: map[int][]linkedInJob{
+				0: {
+					{
+						JobURL:     "https://www.linkedin.com/jobs/view/nonvisa-1/",
+						Title:      "Software Engineer",
+						Company:    "Beta LLC",
+						Location:   "Bengaluru, India",
+						Site:       "linkedin",
+						DatePosted: "2026-02-20",
+					},
+				},
+			},
+		}
+	}
+
+	started, err := StartJobSearch(map[string]any{
+		"user_id":          "u-no-visa",
+		"location":         "Bengaluru, India",
+		"job_title":        "Software Engineer",
+		"dataset_path":     datasetPath,
+		"results_wanted":   1,
+		"max_returned":     1,
+		"scan_multiplier":  1,
+		"max_scan_results": 1,
+	})
+	if err != nil {
+		t.Fatalf("StartJobSearch failed: %v", err)
+	}
+	runID := getString(started, "run_id")
+	if runID == "" {
+		t.Fatalf("missing run_id in start payload")
+	}
+
+	finalStatus := waitForTerminalRunStatusGeneric(t, "u-no-visa", runID, 3*time.Second)
+	if got := getString(finalStatus, "status"); got != "completed" {
+		t.Fatalf("expected completed status, got %q (%#v)", got, finalStatus)
+	}
+
+	results, err := GetJobSearchResults(map[string]any{
+		"user_id": "u-no-visa",
+		"run_id":  runID,
+	})
+	if err != nil {
+		t.Fatalf("GetJobSearchResults failed: %v", err)
+	}
+	jobs := listOrEmpty(results["jobs"])
+	if len(jobs) != 1 {
+		t.Fatalf("expected 1 job, got %d", len(jobs))
+	}
+	status := asMap(results["status"])
+	if enabled, _ := status["visa_filtering"].(bool); enabled {
+		t.Fatalf("expected visa_filtering=false, got %#v", status["visa_filtering"])
+	}
+	first := mapOrNil(jobs[0])
+	if got := getString(first, "visa_match_strength"); got != "not_requested" {
+		t.Fatalf("expected visa_match_strength=not_requested, got %q", got)
+	}
+}
+
+func TestStartVisaJobSearchWithoutPreferencesIsNotBlocked(t *testing.T) {
+	setupUserToolPaths(t)
+	root := t.TempDir()
+	datasetPath := filepath.Join(root, "companies.csv")
+	writeTestDataset(t, datasetPath)
+
+	originalFactory := linkedInClientFactory
+	defer func() {
+		linkedInClientFactory = originalFactory
+	}()
+	linkedInClientFactory = func() linkedInClient {
+		return &fakeLinkedInClient{
+			pages: map[int][]linkedInJob{
+				0: {
+					{
+						JobURL:     "https://www.linkedin.com/jobs/view/nonvisa-2/",
+						Title:      "Software Engineer",
+						Company:    "Beta LLC",
+						Location:   "Mumbai, India",
+						Site:       "linkedin",
+						DatePosted: "2026-02-20",
+					},
+				},
+			},
+		}
+	}
+
+	started, err := StartVisaJobSearch(map[string]any{
+		"user_id":          "u-no-visa-2",
+		"location":         "Mumbai, India",
+		"job_title":        "Software Engineer",
+		"dataset_path":     datasetPath,
+		"results_wanted":   1,
+		"max_returned":     1,
+		"scan_multiplier":  1,
+		"max_scan_results": 1,
+	})
+	if err != nil {
+		t.Fatalf("StartVisaJobSearch should not require preferences: %v", err)
+	}
+	runID := getString(started, "run_id")
+	if runID == "" {
+		t.Fatalf("missing run_id in start payload")
+	}
+	waitForTerminalRunStatus(t, "u-no-visa-2", runID, 3*time.Second)
 }

@@ -39,6 +39,7 @@ func executeSearchRun(runID string) {
 	query := searchQuery{
 		RunID:                    runID,
 		UserID:                   getString(queryMap, "user_id"),
+		SearchMode:               searchModeOrDefault(getString(queryMap, "search_mode")),
 		Location:                 getString(queryMap, "location"),
 		JobTitle:                 getString(queryMap, "job_title"),
 		HoursOld:                 intOrZero(queryMap["hours_old"]),
@@ -61,6 +62,9 @@ func executeSearchRun(runID string) {
 	}
 	if query.Site == "" {
 		query.Site = "linkedin"
+	}
+	if query.SearchMode == "" {
+		query.SearchMode = searchModeGeneral
 	}
 	if query.ResultsWanted < 1 {
 		query.ResultsWanted = defaultSearchResultsWanted

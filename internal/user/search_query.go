@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode"
 )
 
 func executeSearchQuery(
@@ -13,20 +14,29 @@ func executeSearchQuery(
 	onProgress func(phase, detail string, progress float64, payload map[string]any),
 	isCancelled func() bool,
 ) (map[string]any, map[string]any, string, error) {
-	desiredVisaTypes, err := getRequiredUserVisaTypes(query.UserID)
+	queryMode := searchModeOrDefault(query.SearchMode)
+	desiredVisaTypes, err := getOptionalUserVisaTypes(query.UserID)
 	if err != nil {
 		return nil, nil, "", err
 	}
-	if len(desiredVisaTypes) == 0 {
-		return nil, nil, "", fmt.Errorf("no preferred visa types set for user_id='%s'", query.UserID)
+	applyVisaFiltering := queryMode == searchModeVisa && len(desiredVisaTypes) > 0
+	if !applyVisaFiltering {
+		desiredVisaTypes = []string{}
 	}
 
 	onProgress("dataset", "Loading sponsor dataset.", 5, nil)
-	dataset, err := loadCompanyDataset(query.DatasetPath)
+	dataset := companyDataset{Rows: 0, ByNormalizedCompany: map[string]companyDatasetRecord{}}
+	datasetPath := datasetPathOrDefault(query.DatasetPath)
+	dataset, err = loadCompanyDataset(datasetPath)
+	datasetLoadWarning := ""
 	if err != nil {
-		return nil, nil, "", err
+		dataset = companyDataset{Rows: 0, ByNormalizedCompany: map[string]companyDatasetRecord{}}
+		datasetLoadWarning = err.Error()
+		onProgress("dataset", "Dataset unavailable; continuing with live listing signals only.", 8, map[string]any{
+			"warning": datasetLoadWarning,
+		})
 	}
-	freshness := datasetFreshness(datasetPathOrDefault(query.DatasetPath), envOrDefault("VISA_DOL_MANIFEST_PATH", defaultManifestPath))
+	freshness := datasetFreshness(datasetPath, envOrDefault("VISA_DOL_MANIFEST_PATH", defaultManifestPath))
 	ignoredJobs := ignoredJobURLSet(query.UserID)
 	ignoredCompanies := ignoredCompanySet(query.UserID)
 
@@ -103,7 +113,11 @@ func executeSearchQuery(
 		scanExhausted = true
 	}
 
-	onProgress("filter", "Evaluating visa relevance.", 76, map[string]any{"raw_jobs_scanned": len(rawJobs)})
+	filterDetail := "Evaluating visa relevance."
+	if !applyVisaFiltering {
+		filterDetail = "Evaluating role relevance."
+	}
+	onProgress("filter", filterDetail, 76, map[string]any{"raw_jobs_scanned": len(rawJobs)})
 	accepted := []map[string]any{}
 	descriptionFetches := 0
 	descriptionFetchLimit := maxDescriptionFetches()
@@ -156,12 +170,16 @@ func executeSearchQuery(
 		jobFunction := raw.JobFunction
 		jobURLDirect := raw.JobURLDirect
 		isRemote := raw.IsRemote
-		needsDescription := query.RequireDescriptionSignal || desiredCount == 0
+		needsDescription := query.RequireDescriptionSignal || (applyVisaFiltering && desiredCount == 0)
 		if needsDescription {
 			canFetchDescription := descriptionFetches < descriptionFetchLimit && time.Now().Before(descriptionDeadline)
 			if canFetchDescription {
 				if descriptionFetches%5 == 0 {
-					onProgress("filter", "Checking job descriptions for visa signals.", 80, map[string]any{
+					detail := "Checking job descriptions for relevance signals."
+					if applyVisaFiltering {
+						detail = "Checking job descriptions for visa signals."
+					}
+					onProgress("filter", detail, 80, map[string]any{
 						"description_fetches":     descriptionFetches,
 						"description_fetch_limit": descriptionFetchLimit,
 						"accepted_jobs":           len(accepted),
@@ -202,33 +220,55 @@ func executeSearchQuery(
 		}
 		descriptionPositive, descriptionNegative, mentioned := detectDescriptionSignals(descriptionText)
 		descriptionDesired := hasDesiredMention(mentioned, desiredVisaTypes)
-		if descriptionPositive && descriptionDesired {
+		if applyVisaFiltering && descriptionPositive && descriptionDesired {
 			stats.DescriptionSignalMatches++
 		}
+		if !applyVisaFiltering && !jobMatchesRequestedTitle(query.JobTitle, raw.Title) {
+			continue
+		}
 
-		if !shouldAcceptJob(
-			query.StrictnessMode,
-			desiredCount,
-			descriptionPositive,
-			descriptionNegative,
-			descriptionDesired,
-			query.RequireDescriptionSignal,
-		) {
+		acceptJob := false
+		if applyVisaFiltering {
+			acceptJob = shouldAcceptJob(
+				query.StrictnessMode,
+				desiredCount,
+				descriptionPositive,
+				descriptionNegative,
+				descriptionDesired,
+				query.RequireDescriptionSignal,
+			)
+		} else {
+			acceptJob = true
+			if query.RequireDescriptionSignal && strings.TrimSpace(descriptionText) == "" {
+				acceptJob = false
+			}
+		}
+		if !acceptJob {
 			continue
 		}
 
 		visasSponsored := []string{}
-		for _, visa := range desiredVisaTypes {
-			if visaCounts[visa] > 0 || (descriptionDesired && slices.Contains(mentioned, visa)) {
-				if label, ok := visaTypeLabels[visa]; ok {
-					visasSponsored = append(visasSponsored, label)
-				} else {
-					visasSponsored = append(visasSponsored, visa)
+		if applyVisaFiltering {
+			for _, visa := range desiredVisaTypes {
+				if visaCounts[visa] > 0 || (descriptionDesired && slices.Contains(mentioned, visa)) {
+					if label, ok := visaTypeLabels[visa]; ok {
+						visasSponsored = append(visasSponsored, label)
+					} else {
+						visasSponsored = append(visasSponsored, visa)
+					}
 				}
 			}
+		} else {
+			visasSponsored = allVisaLabelsFromCounts(visaCounts)
 		}
 		conf := confidenceScore(desiredCount, totalCount, descriptionPositive, descriptionNegative, descriptionDesired)
 		reasons := buildEligibilityReasons(desiredCount, descriptionPositive, descriptionNegative, descriptionDesired, desiredVisaTypes)
+		visaMatchStrength := visaMatchStrength(desiredCount, descriptionDesired, descriptionPositive)
+		if !applyVisaFiltering {
+			conf = generalConfidenceScore(hasCompany, fetchedDescription)
+			reasons = buildGeneralEligibilityReasons(query.JobTitle, hasCompany, fetchedDescription)
+			visaMatchStrength = "not_requested"
+		}
 		guidance := "Apply and tailor outreach to the hiring team."
 		if len(contacts) > 0 {
 			primary := contacts[0]
@@ -272,7 +312,7 @@ func executeSearchQuery(
 			"employer_contacts":        contacts,
 			"visa_counts":              visaCounts,
 			"visas_sponsored":          visasSponsored,
-			"visa_match_strength":      visaMatchStrength(desiredCount, descriptionDesired, descriptionPositive),
+			"visa_match_strength":      visaMatchStrength,
 			"eligibility_reasons":      reasons,
 			"confidence_score":         conf,
 			"confidence_model_version": "v1.1.0-rules-go",
@@ -284,7 +324,11 @@ func executeSearchQuery(
 
 		if idx%25 == 0 {
 			progress := 76.0 + (18.0 * float64(idx+1) / float64(max(1, len(rawJobs))))
-			onProgress("filter", "Scoring visa eligibility.", progress, map[string]any{
+			detail := "Scoring job relevance."
+			if applyVisaFiltering {
+				detail = "Scoring visa eligibility."
+			}
+			onProgress("filter", detail, progress, map[string]any{
 				"accepted_jobs": len(accepted),
 			})
 		}
@@ -323,18 +367,39 @@ func executeSearchQuery(
 			"description_fetch_limit": descriptionFetchLimit,
 		})
 	}
+	if datasetLoadWarning != "" {
+		recoverySuggestions = append(recoverySuggestions, map[string]any{
+			"type":    "dataset_unavailable",
+			"message": "Company dataset was unavailable; results were ranked using live listing signals only.",
+		})
+	}
 
-	labels := labelsForDesiredVisas(desiredVisaTypes)
 	statusMessage := fmt.Sprintf(
-		"Evaluated %d raw LinkedIn jobs and accepted %d for %s sponsorship.",
+		"Evaluated %d raw LinkedIn jobs and accepted %d matching %q in %q.",
 		stats.RawJobsScanned,
 		stats.AcceptedJobs,
-		strings.Join(labels, ", "),
+		query.JobTitle,
+		query.Location,
 	)
-	if len(page) == 0 {
+	if applyVisaFiltering {
+		labels := labelsForDesiredVisas(desiredVisaTypes)
 		statusMessage = fmt.Sprintf(
-			"No jobs matched requested visa criteria yet for %s. Try related titles or wider location.",
+			"Evaluated %d raw LinkedIn jobs and accepted %d for %s sponsorship.",
+			stats.RawJobsScanned,
+			stats.AcceptedJobs,
 			strings.Join(labels, ", "),
+		)
+		if len(page) == 0 {
+			statusMessage = fmt.Sprintf(
+				"No jobs matched requested visa criteria yet for %s. Try related titles or wider location.",
+				strings.Join(labels, ", "),
+			)
+		}
+	} else if len(page) == 0 {
+		statusMessage = fmt.Sprintf(
+			"No jobs matched %q in %q yet. Try related titles or a wider location.",
+			query.JobTitle,
+			query.Location,
 		)
 	}
 
@@ -351,6 +416,24 @@ func executeSearchQuery(
 		"ignored_jobs_skipped":       stats.IgnoredJobsSkipped,
 		"ignored_companies_skipped":  stats.IgnoredCompaniesSkipped,
 		"dataset_rows":               stats.DatasetRows,
+		"visa_filtering_enabled":     applyVisaFiltering,
+	}
+
+	searchTools := map[string]any{
+		"start":   "start_job_search",
+		"status":  "get_job_search_status",
+		"results": "get_job_search_results",
+		"cancel":  "cancel_job_search",
+	}
+	longGuidance := "Use start_job_search then poll get_job_search_status; fetch pages with get_job_search_results."
+	if queryMode == searchModeVisa {
+		searchTools = map[string]any{
+			"start":   "start_visa_job_search",
+			"status":  "get_visa_job_search_status",
+			"results": "get_visa_job_search_results",
+			"cancel":  "cancel_visa_job_search",
+		}
+		longGuidance = "Use start_visa_job_search then poll get_visa_job_search_status; fetch pages with get_visa_job_search_results."
 	}
 
 	response := map[string]any{
@@ -364,6 +447,8 @@ func executeSearchQuery(
 			"message":            statusMessage,
 			"site":               query.Site,
 			"strictness_mode":    query.StrictnessMode,
+			"search_mode":        queryMode,
+			"visa_filtering":     applyVisaFiltering,
 			"desired_visa_types": desiredVisaTypes,
 			"search_session": map[string]any{
 				"session_id":          sessionID,
@@ -378,13 +463,8 @@ func executeSearchQuery(
 		},
 		"stats": statsMap,
 		"guidance": map[string]any{
-			"long_search_guidance": "Use start_visa_job_search then poll get_visa_job_search_status; fetch pages with get_visa_job_search_results.",
-			"background_search_tools": map[string]any{
-				"start":   "start_visa_job_search",
-				"status":  "get_visa_job_search_status",
-				"results": "get_visa_job_search_results",
-				"cancel":  "cancel_visa_job_search",
-			},
+			"long_search_guidance":    longGuidance,
+			"background_search_tools": searchTools,
 		},
 		"dataset_freshness":    freshness,
 		"pagination":           pagination,
@@ -424,4 +504,94 @@ func optionalBool(value *bool) any {
 		return nil
 	}
 	return *value
+}
+
+func allVisaLabelsFromCounts(visaCounts map[string]int) []string {
+	order := []string{"h1b", "h1b1_chile", "h1b1_singapore", "e3_australian", "green_card"}
+	out := []string{}
+	for _, key := range order {
+		if visaCounts[key] <= 0 {
+			continue
+		}
+		if label, ok := visaTypeLabels[key]; ok {
+			out = append(out, label)
+		}
+	}
+	return out
+}
+
+func generalConfidenceScore(hasCompany bool, fetchedDescription bool) float64 {
+	score := 0.55
+	if hasCompany {
+		score += 0.2
+	}
+	if fetchedDescription {
+		score += 0.15
+	}
+	if score > 1 {
+		score = 1
+	}
+	return score
+}
+
+func buildGeneralEligibilityReasons(jobTitle string, hasCompany bool, fetchedDescription bool) []string {
+	reasons := []string{
+		fmt.Sprintf("matches_requested_title_%s", normalizeCompanyName(jobTitle)),
+	}
+	if hasCompany {
+		reasons = append(reasons, "company_found_in_dataset")
+	}
+	if fetchedDescription {
+		reasons = append(reasons, "job_description_fetched")
+	}
+	return reasons
+}
+
+func tokenizeSearchText(value string) []string {
+	out := []string{}
+	for _, token := range strings.FieldsFunc(strings.ToLower(value), func(r rune) bool {
+		return !unicode.IsLetter(r) && !unicode.IsDigit(r) && r != '+' && r != '#'
+	}) {
+		token = strings.TrimSpace(token)
+		if token == "" {
+			continue
+		}
+		out = append(out, token)
+	}
+	return out
+}
+
+func jobMatchesRequestedTitle(requestedTitle string, jobTitle string) bool {
+	requested := tokenizeSearchText(requestedTitle)
+	if len(requested) == 0 {
+		return true
+	}
+	titleTokens := tokenizeSearchText(jobTitle)
+	if len(titleTokens) == 0 {
+		return false
+	}
+	titleSet := map[string]struct{}{}
+	for _, token := range titleTokens {
+		titleSet[token] = struct{}{}
+	}
+
+	matches := 0
+	for _, token := range requested {
+		if _, ok := titleSet[token]; ok {
+			matches++
+		}
+	}
+
+	if len(requested) == 1 {
+		query := requested[0]
+		if len(query) <= 2 {
+			return matches > 0
+		}
+		return matches > 0 || strings.Contains(strings.ToLower(jobTitle), query)
+	}
+	required := 1
+	if len(requested) >= 3 {
+		required = 2
+	}
+	return matches >= required
 }

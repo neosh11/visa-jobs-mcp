@@ -173,10 +173,10 @@ func GetUserReadiness(args map[string]any) (map[string]any, error) {
 
 	nextActions := []string{}
 	if !hasPreferences {
-		nextActions = append(nextActions, "Call set_user_preferences first (required before start_visa_job_search).")
+		nextActions = append(nextActions, "Optional: call set_user_preferences to enable visa-specific filtering.")
 	}
 	if !datasetExists {
-		nextActions = append(nextActions, "Dataset CSV missing; run pipeline script before searching.")
+		nextActions = append(nextActions, "Dataset CSV missing; search still works, but company visa/history enrichment is reduced.")
 	}
 	if stale, _ := freshness["is_stale"].(bool); stale && datasetExists {
 		nextActions = append(nextActions, "Dataset may be stale; refresh data/companies.csv via pipeline.")
@@ -198,7 +198,9 @@ func GetUserReadiness(args map[string]any) (map[string]any, error) {
 	return map[string]any{
 		"user_id": uid,
 		"readiness": map[string]any{
-			"ready_for_search":         hasPreferences,
+			"ready_for_search":         true,
+			"ready_for_general_search": true,
+			"ready_for_visa_search":    hasPreferences,
 			"has_preferences":          hasPreferences,
 			"preferred_visa_types":     preferredVisaTypes,
 			"dataset_exists":           datasetExists,

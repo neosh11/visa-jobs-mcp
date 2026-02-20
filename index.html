@@ -140,7 +140,7 @@
     <h1>Visa Jobs MCP</h1>
     <p><strong>Always free.</strong> <strong>Completely private.</strong> <strong>Built for agents.</strong></p>
     <p>
-      Find visa-friendly jobs from fresh LinkedIn searches, then rank by real sponsorship evidence.
+      Find relevant jobs from fresh LinkedIn searches with optional visa filtering when needed.
       Use local-first workflows for save/apply/ignore without sharing user data externally.
     </p>
 
@@ -178,22 +178,23 @@ codex mcp get visa-jobs-mcp
 </code></pre>
     <p>Then ask your agent:</p>
     <ul>
-      <li><code>Set my visa preference to E3.</code></li>
-      <li><code>Find software engineer jobs in New York that sponsor E3.</code></li>
+      <li><code>Find IT jobs in Delhi relevant to my skills.</code></li>
+      <li><code>Set my visa preference to E3 and find software engineer jobs in New York that sponsor E3.</code></li>
     </ul>
 
     <h2>How It Works</h2>
     <ol>
       <li>Search fresh jobs by location + title.</li>
-      <li>Match companies against DOL sponsorship history.</li>
-      <li>Keep jobs with visa-positive description evidence.</li>
+      <li>Filter locally for role relevance and ignored jobs/companies.</li>
+      <li>Optionally apply visa matching if preferences are set.</li>
       <li>Return links, contacts, eligibility reasons, and confidence.</li>
     </ol>
 
     <h2>What You Get</h2>
     <ul>
       <li>LinkedIn-focused job discovery.</li>
-      <li>Strict visa preference filtering.</li>
+      <li>General search with no visa setup required.</li>
+      <li>Optional visa preference filtering when configured.</li>
       <li>Session-based pagination and resume behavior.</li>
       <li>Saved jobs and ignored jobs.</li>
       <li>Local user preferences and memory blob.</li>
@@ -203,6 +204,9 @@ codex mcp get visa-jobs-mcp
     <h2>Core Tools</h2>
     <ul>
       <li><code>get_mcp_capabilities</code></li>
+      <li><code>start_job_search</code></li>
+      <li><code>get_job_search_status</code></li>
+      <li><code>get_job_search_results</code></li>
       <li><code>set_user_preferences</code></li>
       <li><code>start_visa_job_search</code></li>
       <li><code>get_visa_job_search_status</code></li>
@@ -224,13 +228,13 @@ codex mcp get visa-jobs-mcp
       </ul>
       <p><strong>Required Before Search</strong></p>
       <ul>
-        <li><code>tool</code>: <code>set_user_preferences</code></li>
-        <li><code>required_fields</code>: <code>user_id</code>, <code>preferred_visa_types</code></li>
+        <li><code>tool</code>: <code>start_job_search</code></li>
+        <li><code>required_fields</code>: <code>user_id</code></li>
       </ul>
       <p><strong>Tools</strong></p>
       <ul>
         <li><code>get_mcp_capabilities</code>: Return MCP capabilities, tools, and contracts for agent self-discovery. (required: <code>-</code>; optional: <code>-</code>)</li>
-        <li><code>set_user_preferences</code>: Save the user&#x27;s visa preferences required before search. (required: <code>user_id, preferred_visa_types</code>; optional: <code>-</code>)</li>
+        <li><code>set_user_preferences</code>: Save the user&#x27;s visa preferences for optional visa-specific matching. (required: <code>user_id, preferred_visa_types</code>; optional: <code>-</code>)</li>
         <li><code>set_user_constraints</code>: Save urgency and work-mode constraints used for personalized guidance. (required: <code>user_id</code>; optional: <code>-</code>)</li>
         <li><code>get_user_preferences</code>: Fetch the saved user preferences and constraints. (required: <code>user_id</code>; optional: <code>-</code>)</li>
         <li><code>get_user_readiness</code>: Report whether the user and local dataset are ready for search. (required: <code>user_id</code>; optional: <code>-</code>)</li>
@@ -258,6 +262,10 @@ codex mcp get visa-jobs-mcp
         <li><code>delete_user_data</code>: Permanently delete all local records for a user. (required: <code>user_id, confirm</code>; optional: <code>-</code>)</li>
         <li><code>get_best_contact_strategy</code>: Suggest best outreach channel/contact for a job. (required: <code>user_id</code>; optional: <code>-</code>)</li>
         <li><code>generate_outreach_message</code>: Generate a practical outreach draft tailored to user and role. (required: <code>user_id</code>; optional: <code>-</code>)</li>
+        <li><code>start_job_search</code>: Start a background job search without requiring visa preferences. (required: <code>location, job_title, user_id</code>; optional: <code>-</code>)</li>
+        <li><code>get_job_search_status</code>: Poll incremental progress/events for a background job search run. (required: <code>user_id, run_id</code>; optional: <code>-</code>)</li>
+        <li><code>get_job_search_results</code>: Fetch current result page from a background job search run. (required: <code>user_id, run_id</code>; optional: <code>-</code>)</li>
+        <li><code>cancel_job_search</code>: Request cancellation of an in-progress background job search run. (required: <code>user_id, run_id</code>; optional: <code>-</code>)</li>
         <li><code>start_visa_job_search</code>: Start a background search run for long scans. (required: <code>location, job_title, user_id</code>; optional: <code>-</code>)</li>
         <li><code>get_visa_job_search_status</code>: Poll incremental progress/events for a background search run. (required: <code>user_id, run_id</code>; optional: <code>-</code>)</li>
         <li><code>get_visa_job_search_results</code>: Fetch current result page from a background search run. (required: <code>user_id, run_id</code>; optional: <code>-</code>)</li>
@@ -363,14 +371,15 @@ codex mcp get visa-jobs-mcp
     &quot;rate_limit_backoff_retries&quot;: true,
     &quot;saved_jobs_local_persistence&quot;: true,
     &quot;search_sessions_local_persistence&quot;: true,
-    &quot;strict_user_visa_match&quot;: true,
+    &quot;strict_user_visa_match&quot;: false,
     &quot;strictness_modes_supported&quot;: [
       &quot;balanced&quot;,
       &quot;strict&quot;
     ],
     &quot;supported_job_sites&quot;: [
       &quot;linkedin&quot;
-    ]
+    ],
+    &quot;visa_matching_optional&quot;: true
   },
   &quot;pagination_contract&quot;: {
     &quot;next_step&quot;: &quot;use pagination.next_offset to request the next page&quot;,
@@ -398,10 +407,9 @@ codex mcp get visa-jobs-mcp
   },
   &quot;required_before_search&quot;: {
     &quot;required_fields&quot;: [
-      &quot;user_id&quot;,
-      &quot;preferred_visa_types&quot;
+      &quot;user_id&quot;
     ],
-    &quot;tool&quot;: &quot;set_user_preferences&quot;
+    &quot;tool&quot;: &quot;start_job_search&quot;
   },
   &quot;search_response_fields_for_agents&quot;: [
     &quot;run&quot;,
@@ -450,7 +458,7 @@ codex mcp get visa-jobs-mcp
       &quot;required_inputs&quot;: []
     },
     {
-      &quot;description&quot;: &quot;Save the user&#x27;s visa preferences required before search.&quot;,
+      &quot;description&quot;: &quot;Save the user&#x27;s visa preferences for optional visa-specific matching.&quot;,
       &quot;name&quot;: &quot;set_user_preferences&quot;,
       &quot;required_inputs&quot;: [
         &quot;user_id&quot;,
@@ -663,6 +671,39 @@ codex mcp get visa-jobs-mcp
       &quot;name&quot;: &quot;generate_outreach_message&quot;,
       &quot;required_inputs&quot;: [
         &quot;user_id&quot;
+      ]
+    },
+    {
+      &quot;description&quot;: &quot;Start a background job search without requiring visa preferences.&quot;,
+      &quot;name&quot;: &quot;start_job_search&quot;,
+      &quot;required_inputs&quot;: [
+        &quot;location&quot;,
+        &quot;job_title&quot;,
+        &quot;user_id&quot;
+      ]
+    },
+    {
+      &quot;description&quot;: &quot;Poll incremental progress/events for a background job search run.&quot;,
+      &quot;name&quot;: &quot;get_job_search_status&quot;,
+      &quot;required_inputs&quot;: [
+        &quot;user_id&quot;,
+        &quot;run_id&quot;
+      ]
+    },
+    {
+      &quot;description&quot;: &quot;Fetch current result page from a background job search run.&quot;,
+      &quot;name&quot;: &quot;get_job_search_results&quot;,
+      &quot;required_inputs&quot;: [
+        &quot;user_id&quot;,
+        &quot;run_id&quot;
+      ]
+    },
+    {
+      &quot;description&quot;: &quot;Request cancellation of an in-progress background job search run.&quot;,
+      &quot;name&quot;: &quot;cancel_job_search&quot;,
+      &quot;required_inputs&quot;: [
+        &quot;user_id&quot;,
+        &quot;run_id&quot;
       ]
     },
     {

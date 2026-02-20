@@ -5,12 +5,34 @@ import (
 	"strings"
 )
 
+type searchToolNames struct {
+	PollTool    string
+	ResultsTool string
+	CancelTool  string
+}
+
 func searchRunIsTerminal(status string) bool {
 	clean := strings.ToLower(strings.TrimSpace(status))
 	return clean == "completed" || clean == "failed" || clean == "cancelled"
 }
 
 func StartVisaJobSearch(args map[string]any) (map[string]any, error) {
+	return startJobSearchWithMode(args, searchModeVisa, searchToolNames{
+		PollTool:    "get_visa_job_search_status",
+		ResultsTool: "get_visa_job_search_results",
+		CancelTool:  "cancel_visa_job_search",
+	})
+}
+
+func StartJobSearch(args map[string]any) (map[string]any, error) {
+	return startJobSearchWithMode(args, searchModeGeneral, searchToolNames{
+		PollTool:    "get_job_search_status",
+		ResultsTool: "get_job_search_results",
+		CancelTool:  "cancel_job_search",
+	})
+}
+
+func startJobSearchWithMode(args map[string]any, mode string, names searchToolNames) (map[string]any, error) {
 	location := getString(args, "location")
 	jobTitle := getString(args, "job_title")
 	userID := getString(args, "user_id")
@@ -110,15 +132,11 @@ func StartVisaJobSearch(args map[string]any) (map[string]any, error) {
 	}
 	datasetPath := datasetPathOrDefault(getString(args, "dataset_path"))
 
-	// Required guard from product requirements: user must set visa config first.
-	if _, err := getRequiredUserVisaTypes(userID); err != nil {
-		return nil, err
-	}
-
 	runID := newRunID()
 	createdAt := utcNowISO()
 	expiresAt := futureISO(searchRunTTLSeconds())
 	query := map[string]any{
+		"search_mode":                mode,
 		"location":                   location,
 		"job_title":                  jobTitle,
 		"user_id":                    userID,
@@ -171,17 +189,26 @@ func StartVisaJobSearch(args map[string]any) (map[string]any, error) {
 		"run_id":           runID,
 		"status":           "pending",
 		"user_id":          userID,
+		"search_mode":      mode,
 		"created_at_utc":   createdAt,
 		"expires_at_utc":   expiresAt,
 		"next_cursor":      intOrZero(run["next_event_id"]),
 		"search_runs_path": searchRunsPath(),
-		"poll_tool":        "get_visa_job_search_status",
-		"results_tool":     "get_visa_job_search_results",
-		"cancel_tool":      "cancel_visa_job_search",
+		"poll_tool":        names.PollTool,
+		"results_tool":     names.ResultsTool,
+		"cancel_tool":      names.CancelTool,
 	}, nil
 }
 
 func GetVisaJobSearchStatus(args map[string]any) (map[string]any, error) {
+	return getJobSearchStatus(args)
+}
+
+func GetJobSearchStatus(args map[string]any) (map[string]any, error) {
+	return getJobSearchStatus(args)
+}
+
+func getJobSearchStatus(args map[string]any) (map[string]any, error) {
 	userID := getString(args, "user_id")
 	runID := getString(args, "run_id")
 	if userID == "" {
@@ -246,6 +273,14 @@ func GetVisaJobSearchStatus(args map[string]any) (map[string]any, error) {
 }
 
 func GetVisaJobSearchResults(args map[string]any) (map[string]any, error) {
+	return getJobSearchResults(args, "get_visa_job_search_status")
+}
+
+func GetJobSearchResults(args map[string]any) (map[string]any, error) {
+	return getJobSearchResults(args, "get_job_search_status")
+}
+
+func getJobSearchResults(args map[string]any, statusToolName string) (map[string]any, error) {
 	userID := getString(args, "user_id")
 	runID := getString(args, "run_id")
 	if userID == "" {
@@ -264,7 +299,7 @@ func GetVisaJobSearchResults(args map[string]any) (map[string]any, error) {
 	}
 	latestResponse := asMap(run["latest_response"])
 	if len(latestResponse) == 0 {
-		return nil, fmt.Errorf("no result snapshot yet; poll get_visa_job_search_status until results are available")
+		return nil, fmt.Errorf("no result snapshot yet; poll %s until results are available", statusToolName)
 	}
 
 	requestedOffset := intOrZero(query["offset"])
@@ -341,6 +376,14 @@ func GetVisaJobSearchResults(args map[string]any) (map[string]any, error) {
 }
 
 func CancelVisaJobSearch(args map[string]any) (map[string]any, error) {
+	return cancelJobSearch(args)
+}
+
+func CancelJobSearch(args map[string]any) (map[string]any, error) {
+	return cancelJobSearch(args)
+}
+
+func cancelJobSearch(args map[string]any) (map[string]any, error) {
 	userID := getString(args, "user_id")
 	runID := getString(args, "run_id")
 	if userID == "" {

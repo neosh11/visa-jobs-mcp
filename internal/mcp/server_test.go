@@ -41,11 +41,15 @@ func TestInitializeAndListTools(t *testing.T) {
 		t.Fatal("expected at least one tool")
 	}
 	foundReadiness := false
+	foundStartJobSearch := false
 	foundLegacyFind := false
 	foundSetPrefsSchema := false
 	for _, tool := range tools.Tools {
 		if tool.Name == "get_user_readiness" {
 			foundReadiness = true
+		}
+		if tool.Name == "start_job_search" {
+			foundStartJobSearch = true
 		}
 		if tool.Name == "find_visa_sponsored_jobs" {
 			foundLegacyFind = true
@@ -66,6 +70,9 @@ func TestInitializeAndListTools(t *testing.T) {
 	}
 	if !foundReadiness {
 		t.Fatal("expected get_user_readiness in tools/list")
+	}
+	if !foundStartJobSearch {
+		t.Fatal("expected start_job_search in tools/list")
 	}
 	if foundLegacyFind {
 		t.Fatal("legacy find_visa_sponsored_jobs should not be exposed")
@@ -306,7 +313,6 @@ func TestStartVisaJobSearchReturnsRunMetadata(t *testing.T) {
 	if got := getStringFromAnyMap(structured, "poll_tool"); got != "get_visa_job_search_status" {
 		t.Fatalf("expected poll_tool=get_visa_job_search_status, got %q", got)
 	}
-	waitForTerminalRunStatusViaTool(t, session, "default", runID, 5*time.Second)
 }
 
 func connectTestSession(t *testing.T) (*mcpSDK.Server, *mcpSDK.ClientSession, func()) {

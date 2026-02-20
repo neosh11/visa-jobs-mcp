@@ -1,6 +1,6 @@
 # visa-jobs-mcp [![MIT License](https://img.shields.io/badge/license-MIT-green.svg?style=flat-square)](LICENSE) [![Homebrew Tap](https://img.shields.io/badge/homebrew-neosh11%2Fvisa--jobs--mcp-blue?style=flat-square)](https://github.com/neosh11/homebrew-visa-jobs-mcp)
 
-`visa-jobs-mcp` is an MCP server that helps agents find visa-friendly jobs from fresh LinkedIn searches.
+`visa-jobs-mcp` is an MCP server that helps agents find relevant jobs from fresh LinkedIn searches, with optional visa-aware filtering.
 
 <img width="775" height="663" alt="Screenshot 2026-02-20 at 10 20 22 am" src="https://github.com/user-attachments/assets/91dd3b16-59eb-42d5-806a-155c8d7b985f" />
 
@@ -67,8 +67,8 @@ codex mcp get visa-jobs-mcp
 
 In a new Codex session, ask naturally:
 
-- `Set my visa preference to E3.`
-- `Find software engineer jobs in New York that sponsor E3.`
+- `Find IT jobs in Delhi for my skills.`
+- `Set my visa preference to E3 and find software engineer jobs in New York that sponsor E3.`
 
 ### Build from source (optional)
 
@@ -111,7 +111,8 @@ VISA_E2E_JOB_TITLE="Software Engineer" \
 ## What It Supports
 
 - LinkedIn-only search.
-- Strict visa preference matching (`set_user_preferences` is required before search).
+- General skill/location job search with no visa setup required.
+- Optional visa preference matching when `preferred_visa_types` is set.
 - Search sessions with pagination and resume support.
 - Saved jobs and ignored jobs.
 - Employer contact extraction when available.
@@ -121,6 +122,9 @@ VISA_E2E_JOB_TITLE="Software Engineer" \
 
 ## Core MCP Tools
 
+- `start_job_search`
+- `get_job_search_status`
+- `get_job_search_results`
 - `set_user_preferences`
 - `start_visa_job_search`
 - `get_visa_job_search_status`
@@ -148,8 +152,8 @@ Generated from `get_mcp_capabilities()` via `scripts/generate_contract_docs.py`.
 - `confidence_model_version`: `v1.1.0-rules-go`
 
 ### Required Before Search
-- `tool`: `set_user_preferences`
-- `required_fields`: `user_id`, `preferred_visa_types`
+- `tool`: `start_job_search`
+- `required_fields`: `user_id`
 
 ### Design Decisions
 - `agent_is_reasoning_layer`: `True`
@@ -168,9 +172,10 @@ Generated from `get_mcp_capabilities()` via `scripts/generate_contract_docs.py`.
 - `rate_limit_backoff_retries`: `True`
 - `saved_jobs_local_persistence`: `True`
 - `search_sessions_local_persistence`: `True`
-- `strict_user_visa_match`: `True`
+- `strict_user_visa_match`: `False`
 - `strictness_modes_supported`: `['balanced', 'strict']`
 - `supported_job_sites`: `['linkedin']`
+- `visa_matching_optional`: `True`
 
 ### Defaults
 - `dataset_stale_after_days`: `30`
@@ -190,7 +195,7 @@ Generated from `get_mcp_capabilities()` via `scripts/generate_contract_docs.py`.
 | Tool | Description | Required Inputs | Optional Inputs |
 |---|---|---|---|
 | `get_mcp_capabilities` | Return MCP capabilities, tools, and contracts for agent self-discovery. | - | - |
-| `set_user_preferences` | Save the user's visa preferences required before search. | `user_id`, `preferred_visa_types` | - |
+| `set_user_preferences` | Save the user's visa preferences for optional visa-specific matching. | `user_id`, `preferred_visa_types` | - |
 | `set_user_constraints` | Save urgency and work-mode constraints used for personalized guidance. | `user_id` | - |
 | `get_user_preferences` | Fetch the saved user preferences and constraints. | `user_id` | - |
 | `get_user_readiness` | Report whether the user and local dataset are ready for search. | `user_id` | - |
@@ -218,6 +223,10 @@ Generated from `get_mcp_capabilities()` via `scripts/generate_contract_docs.py`.
 | `delete_user_data` | Permanently delete all local records for a user. | `user_id`, `confirm` | - |
 | `get_best_contact_strategy` | Suggest best outreach channel/contact for a job. | `user_id` | - |
 | `generate_outreach_message` | Generate a practical outreach draft tailored to user and role. | `user_id` | - |
+| `start_job_search` | Start a background job search without requiring visa preferences. | `location`, `job_title`, `user_id` | - |
+| `get_job_search_status` | Poll incremental progress/events for a background job search run. | `user_id`, `run_id` | - |
+| `get_job_search_results` | Fetch current result page from a background job search run. | `user_id`, `run_id` | - |
+| `cancel_job_search` | Request cancellation of an in-progress background job search run. | `user_id`, `run_id` | - |
 | `start_visa_job_search` | Start a background search run for long scans. | `location`, `job_title`, `user_id` | - |
 | `get_visa_job_search_status` | Poll incremental progress/events for a background search run. | `user_id`, `run_id` | - |
 | `get_visa_job_search_results` | Fetch current result page from a background search run. | `user_id`, `run_id` | - |
@@ -325,14 +334,15 @@ Generated from `get_mcp_capabilities()` via `scripts/generate_contract_docs.py`.
     "rate_limit_backoff_retries": true,
     "saved_jobs_local_persistence": true,
     "search_sessions_local_persistence": true,
-    "strict_user_visa_match": true,
+    "strict_user_visa_match": false,
     "strictness_modes_supported": [
       "balanced",
       "strict"
     ],
     "supported_job_sites": [
       "linkedin"
-    ]
+    ],
+    "visa_matching_optional": true
   },
   "pagination_contract": {
     "next_step": "use pagination.next_offset to request the next page",
@@ -360,10 +370,9 @@ Generated from `get_mcp_capabilities()` via `scripts/generate_contract_docs.py`.
   },
   "required_before_search": {
     "required_fields": [
-      "user_id",
-      "preferred_visa_types"
+      "user_id"
     ],
-    "tool": "set_user_preferences"
+    "tool": "start_job_search"
   },
   "search_response_fields_for_agents": [
     "run",
@@ -412,7 +421,7 @@ Generated from `get_mcp_capabilities()` via `scripts/generate_contract_docs.py`.
       "required_inputs": []
     },
     {
-      "description": "Save the user's visa preferences required before search.",
+      "description": "Save the user's visa preferences for optional visa-specific matching.",
       "name": "set_user_preferences",
       "required_inputs": [
         "user_id",
@@ -625,6 +634,39 @@ Generated from `get_mcp_capabilities()` via `scripts/generate_contract_docs.py`.
       "name": "generate_outreach_message",
       "required_inputs": [
         "user_id"
+      ]
+    },
+    {
+      "description": "Start a background job search without requiring visa preferences.",
+      "name": "start_job_search",
+      "required_inputs": [
+        "location",
+        "job_title",
+        "user_id"
+      ]
+    },
+    {
+      "description": "Poll incremental progress/events for a background job search run.",
+      "name": "get_job_search_status",
+      "required_inputs": [
+        "user_id",
+        "run_id"
+      ]
+    },
+    {
+      "description": "Fetch current result page from a background job search run.",
+      "name": "get_job_search_results",
+      "required_inputs": [
+        "user_id",
+        "run_id"
+      ]
+    },
+    {
+      "description": "Request cancellation of an in-progress background job search run.",
+      "name": "cancel_job_search",
+      "required_inputs": [
+        "user_id",
+        "run_id"
       ]
     },
     {

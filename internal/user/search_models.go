@@ -26,6 +26,11 @@ const (
 	defaultLinkedInRequestTimeoutSec = 12
 )
 
+const (
+	searchModeGeneral = "general"
+	searchModeVisa    = "visa"
+)
+
 type companyDatasetRecord struct {
 	CompanyName string
 	CompanyTier string
@@ -90,6 +95,7 @@ type linkedInClient interface {
 type searchQuery struct {
 	RunID                    string
 	UserID                   string
+	SearchMode               string
 	Location                 string
 	JobTitle                 string
 	HoursOld                 int
@@ -193,6 +199,18 @@ func strictnessOrDefault(value string) string {
 		return mode
 	}
 	return mode
+}
+
+func searchModeOrDefault(value string) string {
+	mode := strings.ToLower(strings.TrimSpace(value))
+	switch mode {
+	case searchModeGeneral:
+		return searchModeGeneral
+	case searchModeVisa:
+		return searchModeVisa
+	default:
+		return searchModeGeneral
+	}
 }
 
 func utcNow() time.Time {

@@ -331,17 +331,32 @@ func getRequiredUserVisaTypes(userID string) ([]string, error) {
 	if uid == "" {
 		return nil, fmt.Errorf("user_id is required; set visa preferences first using set_user_preferences")
 	}
+	normalized, err := getOptionalUserVisaTypes(uid)
+	if err != nil {
+		return nil, err
+	}
+	if len(normalized) == 0 {
+		return nil, fmt.Errorf("user_id='%s' has no preferred_visa_types; set visa preferences first using set_user_preferences", uid)
+	}
+	return normalized, nil
+}
+
+func getOptionalUserVisaTypes(userID string) ([]string, error) {
+	uid := strings.TrimSpace(userID)
+	if uid == "" {
+		return nil, nil
+	}
 	prefs, err := loadPrefs()
 	if err != nil {
 		return nil, err
 	}
 	user := prefs[uid]
 	if user == nil {
-		return nil, fmt.Errorf("no saved preferences for user_id='%s'; set visa preferences first using set_user_preferences", uid)
+		return []string{}, nil
 	}
 	rawTypes := getStringList(user, "preferred_visa_types")
 	if len(rawTypes) == 0 {
-		return nil, fmt.Errorf("user_id='%s' has no preferred_visa_types; set visa preferences first using set_user_preferences", uid)
+		return []string{}, nil
 	}
 	normalizedSet := map[string]struct{}{}
 	for _, raw := range rawTypes {
