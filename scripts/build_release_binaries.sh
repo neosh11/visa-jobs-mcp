@@ -4,175 +4,102 @@ set -euo pipefail
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 cd "$ROOT_DIR"
 
-PYTHON_BIN="${PYTHON_BIN:-python3}"
-VERSION="${VERSION:-$($PYTHON_BIN - <<'PY'
-import tomllib
-from pathlib import Path
+GO_BIN="${GO_BIN:-go}"
+VERSION="${VERSION:-}"
 
-data = tomllib.loads(Path('pyproject.toml').read_text(encoding='utf-8'))
-print(data['project']['version'])
-PY
-)}"
-PYI_BUNDLE_MODE="${PYI_BUNDLE_MODE:-onefile}"
+if [[ -z "${VERSION}" ]]; then
+  if git describe --tags --exact-match >/dev/null 2>&1; then
+    TAG="$(git describe --tags --exact-match)"
+    VERSION="${TAG#v}"
+  else
+    VERSION="0.0.0-dev"
+  fi
+fi
 
-OS_NAME="$(uname -s | tr '[:upper:]' '[:lower:]')"
-ARCH="$(uname -m)"
-case "$OS_NAME" in
+HOST_OS="$(uname -s | tr '[:upper:]' '[:lower:]')"
+HOST_ARCH="$(uname -m)"
+
+GOOS=""
+GOARCH=""
+PLATFORM=""
+case "${HOST_OS}" in
   darwin)
-    PLATFORM="macos-${ARCH}"
+    GOOS="darwin"
+    case "${HOST_ARCH}" in
+      arm64)
+        GOARCH="arm64"
+        PLATFORM="macos-arm64"
+        ;;
+      x86_64)
+        GOARCH="amd64"
+        PLATFORM="macos-x86_64"
+        ;;
+      *)
+        echo "Unsupported darwin architecture: ${HOST_ARCH}" >&2
+        exit 1
+        ;;
+    esac
     ;;
   linux)
-    PLATFORM="linux-${ARCH}"
+    GOOS="linux"
+    case "${HOST_ARCH}" in
+      aarch64|arm64)
+        GOARCH="arm64"
+        PLATFORM="linux-arm64"
+        ;;
+      x86_64)
+        GOARCH="amd64"
+        PLATFORM="linux-x86_64"
+        ;;
+      *)
+        echo "Unsupported linux architecture: ${HOST_ARCH}" >&2
+        exit 1
+        ;;
+    esac
     ;;
   *)
-    echo "Unsupported OS: ${OS_NAME}" >&2
+    echo "Unsupported OS: ${HOST_OS}" >&2
     exit 1
     ;;
 esac
 
-TLS_LIB_NAME=""
-if [[ "$OS_NAME" == "darwin" ]]; then
-  if [[ "$ARCH" == "arm64" ]]; then
-    TLS_LIB_NAME="tls-client-arm64.dylib"
-  else
-    TLS_LIB_NAME="tls-client-x86.dylib"
-  fi
-elif [[ "$OS_NAME" == "linux" ]]; then
-  if [[ "$ARCH" == "aarch64" || "$ARCH" == "arm64" ]]; then
-    TLS_LIB_NAME="tls-client-arm64.so"
-  elif [[ "$ARCH" == "x86_64" ]]; then
-    TLS_LIB_NAME="tls-client-amd64.so"
-  else
-    TLS_LIB_NAME="tls-client-x86.so"
-  fi
-fi
-
-if [[ "$PYI_BUNDLE_MODE" != "onedir" && "$PYI_BUNDLE_MODE" != "onefile" ]]; then
-  echo "Unsupported PYI_BUNDLE_MODE: ${PYI_BUNDLE_MODE} (expected: onedir or onefile)" >&2
+DATASET_FILE="$ROOT_DIR/data/companies.csv"
+if [[ ! -f "${DATASET_FILE}" ]]; then
+  echo "Missing dataset file: ${DATASET_FILE}" >&2
+  echo "Run the pipeline first to produce data/companies.csv." >&2
   exit 1
 fi
 
-DEFAULT_DATASET_FILE="$ROOT_DIR/data/companies.csv"
-if [[ ! -f "$DEFAULT_DATASET_FILE" ]]; then
-  echo "Missing bundled dataset file: ${DEFAULT_DATASET_FILE}" >&2
-  echo "Run visa-jobs-pipeline or provide data/companies.csv before building release artifacts." >&2
-  exit 1
-fi
-
-BUILD_ROOT="$ROOT_DIR/build/pyinstaller"
+BUILD_ROOT="$ROOT_DIR/build/go"
 DIST_ROOT="$ROOT_DIR/dist/bin"
+PACKAGE_ROOT="$ROOT_DIR/dist/package"
 RELEASE_ROOT="$ROOT_DIR/dist/release"
 
-rm -rf "$BUILD_ROOT" "$DIST_ROOT"
-mkdir -p "$BUILD_ROOT/wrappers" "$DIST_ROOT" "$RELEASE_ROOT"
+rm -rf "$BUILD_ROOT" "$DIST_ROOT" "$PACKAGE_ROOT" "$RELEASE_ROOT"
+mkdir -p "$BUILD_ROOT" "$DIST_ROOT" "$PACKAGE_ROOT/data" "$RELEASE_ROOT"
 
-"$PYTHON_BIN" -m pip install --upgrade pip
-"$PYTHON_BIN" -m pip install -e .
-"$PYTHON_BIN" -m pip install pyinstaller
+LDFLAGS="-s -w -X main.version=${VERSION}"
+CGO_ENABLED=0 GOOS="${GOOS}" GOARCH="${GOARCH}" \
+  "${GO_BIN}" build -trimpath -ldflags "${LDFLAGS}" -o "$DIST_ROOT/visa-jobs-mcp" ./cmd/visa-jobs-mcp
 
-TLS_DEP_DIR="$("$PYTHON_BIN" - <<'PY'
-from pathlib import Path
-import tls_client
-
-print(Path(tls_client.__file__).resolve().parent / "dependencies")
-PY
-)"
-
-if [[ ! -f "${TLS_DEP_DIR}/${TLS_LIB_NAME}" ]]; then
-  echo "Expected TLS dependency missing: ${TLS_DEP_DIR}/${TLS_LIB_NAME}" >&2
-  exit 1
+if [[ "${GOOS}" == "$("${GO_BIN}" env GOOS)" && "${GOARCH}" == "$("${GO_BIN}" env GOARCH)" ]]; then
+  "$DIST_ROOT/visa-jobs-mcp" --version >/dev/null
 fi
 
-TLS_MOVED_FILES=()
-for TLS_FILE in "${TLS_DEP_DIR}"/tls-client-*; do
-  TLS_BASE="$(basename "$TLS_FILE")"
-  if [[ "$TLS_BASE" == "$TLS_LIB_NAME" ]]; then
-    continue
-  fi
-  mv "$TLS_FILE" "${TLS_FILE}.buildskip"
-  TLS_MOVED_FILES+=("$TLS_FILE")
-done
-
-restore_tls_files() {
-  for MOVED in "${TLS_MOVED_FILES[@]}"; do
-    if [[ -f "${MOVED}.buildskip" ]]; then
-      mv "${MOVED}.buildskip" "$MOVED"
-    fi
-  done
-}
-
-trap restore_tls_files EXIT
-
-build_entrypoint() {
-  local exe_name="$1"
-  local module_path="$2"
-  local wrapper="$BUILD_ROOT/wrappers/${exe_name}.py"
-  local bundle_flag="--onedir"
-  local -a pyinstaller_args
-  if [[ "$PYI_BUNDLE_MODE" == "onefile" ]]; then
-    bundle_flag="--onefile"
-  fi
-
-  cat > "$wrapper" <<PY
-from visa_jobs_mcp.${module_path} import main
-
-if __name__ == "__main__":
-    main()
-PY
-
-  pyinstaller_args=(
-    --noconfirm
-    "$bundle_flag"
-    --collect-all visa_jobs_mcp
-    --collect-all jobspy
-    --collect-submodules tls_client
-    --add-data "${TLS_DEP_DIR}/${TLS_LIB_NAME}:tls_client/dependencies"
-    --add-data "${DEFAULT_DATASET_FILE}:data"
-    --name "$exe_name"
-    --distpath "$DIST_ROOT"
-    --workpath "$BUILD_ROOT/work-${exe_name}"
-    --specpath "$BUILD_ROOT/spec"
-    "$wrapper"
-  )
-  if [[ "${PYINSTALLER_CLEAN:-0}" == "1" ]]; then
-    pyinstaller_args=(--clean "${pyinstaller_args[@]}")
-  fi
-
-  "$PYTHON_BIN" -m PyInstaller "${pyinstaller_args[@]}"
-}
-
-build_entrypoint "visa-jobs-mcp" "server_cli"
-build_entrypoint "visa-jobs-pipeline" "pipeline_cli"
-build_entrypoint "visa-jobs-setup" "setup_cli"
-build_entrypoint "visa-jobs-doctor" "doctor_cli"
-
-normalize_macos_macho_ids() {
-  if [[ "$OS_NAME" != "darwin" || "$PYI_BUNDLE_MODE" != "onedir" ]]; then
-    return
-  fi
-
-  while IFS= read -r -d '' file; do
-    if ! otool -D "$file" >/tmp/visa_jobs_otool_id.txt 2>/dev/null; then
-      continue
-    fi
-    current_id="$(sed -n '2p' /tmp/visa_jobs_otool_id.txt || true)"
-    if [[ -z "${current_id}" ]]; then
-      continue
-    fi
-    if [[ "${current_id}" == @rpath/* ]]; then
-      install_name_tool -id "@loader_path/$(basename "$file")" "$file" || true
-    fi
-  done < <(find "$DIST_ROOT" -type f \( -name '*.so' -o -name '*.dylib' \) -print0)
-  rm -f /tmp/visa_jobs_otool_id.txt
-}
-
-normalize_macos_macho_ids
+cp "$DIST_ROOT/visa-jobs-mcp" "$PACKAGE_ROOT/visa-jobs-mcp"
+cp "$DATASET_FILE" "$PACKAGE_ROOT/data/companies.csv"
+if [[ -f "$ROOT_DIR/LICENSE" ]]; then
+  cp "$ROOT_DIR/LICENSE" "$PACKAGE_ROOT/LICENSE"
+fi
 
 ARTIFACT="visa-jobs-mcp-v${VERSION}-${PLATFORM}.tar.gz"
-tar -czf "$RELEASE_ROOT/$ARTIFACT" \
-  -C "$DIST_ROOT" \
-  visa-jobs-mcp visa-jobs-pipeline visa-jobs-setup visa-jobs-doctor
-shasum -a 256 "$RELEASE_ROOT/$ARTIFACT" > "$RELEASE_ROOT/$ARTIFACT.sha256"
+tar -czf "$RELEASE_ROOT/$ARTIFACT" -C "$PACKAGE_ROOT" .
+
+if command -v shasum >/dev/null 2>&1; then
+  shasum -a 256 "$RELEASE_ROOT/$ARTIFACT" > "$RELEASE_ROOT/$ARTIFACT.sha256"
+else
+  sha256sum "$RELEASE_ROOT/$ARTIFACT" > "$RELEASE_ROOT/$ARTIFACT.sha256"
+fi
 
 echo "Built release artifacts:"
 ls -lh "$RELEASE_ROOT"

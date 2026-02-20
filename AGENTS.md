@@ -2,65 +2,93 @@
 
 Code guide for contributors and coding agents working in `visa-jobs-mcp`.
 
-## Product constraints
+## Product invariants
 - Keep job source support to LinkedIn only.
 - Do not use proxies.
-- Keep company dataset path as `data/companies.csv`.
-- Keep user data local/private; do not add remote telemetry by default.
+- Keep default sponsor dataset path as `data/companies.csv`.
+- Keep all user state local/private; no remote telemetry by default.
+- Require visa preference setup (`set_user_preferences`) before starting searches.
 
-## Repo map
-- MCP server: `src/visa_jobs_mcp/server.py`
-- Job ingestion adapter: `src/visa_jobs_mcp/jobspy_adapter.py`
-- DOL pipeline: `src/visa_jobs_mcp/pipeline.py`
-- CLI entrypoints: `src/visa_jobs_mcp/*_cli.py`
-- Tests: `tests/`
-- Release workflow: `.github/workflows/build-release-binaries.yml`
+## Architecture
+- Go MCP entrypoint: `cmd/visa-jobs-mcp/main.go`
+- Go MCP server wiring: `internal/mcp/server.go`
+- MCP contract source: `internal/contract/contract.json`
+- User/domain logic: `internal/user/`
+- Async search runtime (Go): `internal/user/search_*.go`
+  - Site abstraction entrypoint: `internal/user/search_sites.go`
+- Job management tools (Go): `internal/user/job_tools_*.go`
+- Job shared helpers (Go):
+  - `internal/user/job_common.go`
+  - `internal/user/job_list_store.go`
+  - `internal/user/job_reference.go`
+  - `internal/user/job_pipeline_store.go`
+  - `internal/user/job_pipeline_helpers.go`
+- Python data pipeline (kept separate from MCP runtime):
+  - `src/visa_jobs_mcp/pipeline.py`
+  - `src/visa_jobs_mcp/pipeline_cli.py`
+  - `scripts/run_internal_pipeline.sh`
 
-## Local development
+## Dependency policy
+- Prefer well-adopted and actively maintained packages.
+- Current Go runtime dependencies:
+  - `github.com/modelcontextprotocol/go-sdk` (official MCP SDK)
+  - `github.com/PuerkitoBio/goquery` (HTML parsing)
+  - `github.com/go-resty/resty/v2` (HTTP client)
+- Research notes and rationale: `doc/dependency-research.md`
+
+## Contract discipline
+- Any new/removed MCP tool must be updated in `internal/contract/contract.json`.
+- Keep `internal/mcp/contract_parity_test.go` passing (all contract tools must have handlers).
+- If tool descriptions or shape change, regenerate docs:
+  - `python3 scripts/generate_contract_docs.py`
+
+## Concurrency model
+- MCP SDK can process concurrent requests; keep handlers safe for concurrent execution.
+- Server enforces per-`user_id` request serialization in `internal/mcp/server.go` to prevent local-store write clobbering.
+- Tools without `user_id` use a shared lock.
+- Background search execution remains asynchronous and uses dedicated search store locks.
+
+## File organization rules
+- Avoid very large source files; split by domain (`search_*`, `job_tools_*`, etc.).
+- Keep files under ~500 lines when practical.
+- Keep tool handlers thin; move reusable logic into helpers.
+- Add tests for every new tool or behavior branch.
+
+## Development
+
+### Go MCP runtime
+```bash
+go test ./...
+go test -race ./...
+go run ./cmd/visa-jobs-mcp --version
+```
+
+Run MCP server over stdio:
+```bash
+go run ./cmd/visa-jobs-mcp
+```
+
+### Python pipeline (only when touching pipeline code)
 ```bash
 python3 -m venv .venv
 source .venv/bin/activate
 pip install --upgrade pip
 pip install -e .[dev]
-```
-
-Run tests:
-```bash
 pytest -q
+python -m visa_jobs_mcp.pipeline_cli --help
 ```
 
-## Build and release binaries
-Build locally:
-```bash
-./scripts/build_release_binaries.sh
-```
+## Release and packaging notes
+- Homebrew users should run the packaged `visa-jobs-mcp` binary.
+- Release artifacts are built from Go (`scripts/build_release_binaries.sh`) and bundle `data/companies.csv`.
+- `scripts/release_tag.sh <version>` runs `go test ./...` by default; set `RUN_PYTHON_TESTS=1` to also run pipeline Python tests.
+- Keep install instructions in `README.md` accurate and copy-pasteable.
+- Do not commit personal paths, temp folders, or PII.
+- Stage only relevant files for each commit.
 
-Force a clean PyInstaller build:
-```bash
-PYINSTALLER_CLEAN=1 ./scripts/build_release_binaries.sh
-```
-
-Tag release (runs tests, pushes `main`, pushes tag):
-```bash
-./scripts/release_tag.sh 0.2
-```
-
-## Homebrew tap update (manual)
-Homebrew formula cannot safely track a moving `latest` URL with fixed checksum; keep versioned URLs + SHA256.
-
-Tap repo:
-- `https://github.com/neosh11/homebrew-visa-jobs-mcp`
-
-After a new tag release:
-1. Fetch SHA256 values from:
-   - `.../visa-jobs-mcp-vX.Y-macos-arm64.tar.gz.sha256`
-   - `.../visa-jobs-mcp-vX.Y-macos-x86_64.tar.gz.sha256`
-2. Update `Formula/visa-jobs-mcp.rb` in the tap repo with new `version`, URLs, and SHA256 values.
-3. Commit and push the tap repo.
-
-## PR/commit checklist
-- Run `pytest -q`.
-- Keep README install instructions accurate.
-- Keep `index.html` install snippet accurate with current release line.
-- Do not commit personal/local paths or PII.
-- Stage only relevant files.
+## Quality gates
+- CI runs:
+  - `go test ./...`
+  - `staticcheck ./...` (via `.github/workflows/go-staticcheck.yml`)
+- Local staticcheck command:
+  - `go install honnef.co/go/tools/cmd/staticcheck@v0.6.1 && staticcheck ./...`
