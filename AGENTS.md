@@ -39,6 +39,7 @@ Code guide for contributors and coding agents working in `visa-jobs-mcp`.
 ## Contract discipline
 - Any new/removed MCP tool must be updated in `internal/contract/contract.json`.
 - Keep `internal/mcp/contract_parity_test.go` passing (all contract tools must have handlers).
+- Keep tool argument schemas in sync with contract fields via `internal/mcp/input_schema.go`.
 - If tool descriptions or shape change, regenerate docs:
   - `python3 scripts/generate_contract_docs.py`
 

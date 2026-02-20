@@ -2,10 +2,12 @@ package mcp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"testing"
@@ -37,6 +39,7 @@ func TestInitializeAndListTools(t *testing.T) {
 	}
 	foundReadiness := false
 	foundLegacyFind := false
+	foundSetPrefsSchema := false
 	for _, tool := range tools.Tools {
 		if tool.Name == "get_user_readiness" {
 			foundReadiness = true
@@ -44,12 +47,28 @@ func TestInitializeAndListTools(t *testing.T) {
 		if tool.Name == "find_visa_sponsored_jobs" {
 			foundLegacyFind = true
 		}
+		if tool.Name == "set_user_preferences" {
+			schema := toSchemaMap(t, tool.InputSchema)
+			required := toStringSlice(schema["required"])
+			if !slices.Contains(required, "user_id") || !slices.Contains(required, "preferred_visa_types") {
+				t.Fatalf("set_user_preferences schema missing required fields: %#v", schema["required"])
+			}
+			props := toMap(schema["properties"])
+			prefsProp := toMap(props["preferred_visa_types"])
+			if got := getStringFromAnyMap(prefsProp, "type"); got != "array" {
+				t.Fatalf("preferred_visa_types should be array in schema, got %#v", prefsProp)
+			}
+			foundSetPrefsSchema = true
+		}
 	}
 	if !foundReadiness {
 		t.Fatal("expected get_user_readiness in tools/list")
 	}
 	if foundLegacyFind {
 		t.Fatal("legacy find_visa_sponsored_jobs should not be exposed")
+	}
+	if !foundSetPrefsSchema {
+		t.Fatal("expected set_user_preferences in tools/list")
 	}
 }
 
@@ -267,6 +286,7 @@ func TestStartVisaJobSearchReturnsRunMetadata(t *testing.T) {
 
 func connectTestSession(t *testing.T) (*mcpSDK.Server, *mcpSDK.ClientSession, func()) {
 	t.Helper()
+	ensureMCPTestPaths(t)
 
 	server, err := newServer()
 	if err != nil {
@@ -305,6 +325,27 @@ func connectTestSession(t *testing.T) (*mcpSDK.Server, *mcpSDK.ClientSession, fu
 	return server, session, cleanup
 }
 
+func ensureMCPTestPaths(t *testing.T) {
+	t.Helper()
+	root := t.TempDir()
+	setEnvIfUnset(t, "VISA_USER_PREFS_PATH", filepath.Join(root, "prefs.json"))
+	setEnvIfUnset(t, "VISA_USER_BLOB_PATH", filepath.Join(root, "blob.json"))
+	setEnvIfUnset(t, "VISA_SAVED_JOBS_PATH", filepath.Join(root, "saved_jobs.json"))
+	setEnvIfUnset(t, "VISA_IGNORED_JOBS_PATH", filepath.Join(root, "ignored_jobs.json"))
+	setEnvIfUnset(t, "VISA_IGNORED_COMPANIES_PATH", filepath.Join(root, "ignored_companies.json"))
+	setEnvIfUnset(t, "VISA_SEARCH_SESSION_PATH", filepath.Join(root, "search_sessions.json"))
+	setEnvIfUnset(t, "VISA_SEARCH_RUNS_PATH", filepath.Join(root, "search_runs.json"))
+	setEnvIfUnset(t, "VISA_JOB_DB_PATH", filepath.Join(root, "job_pipeline.json"))
+}
+
+func setEnvIfUnset(t *testing.T, key, value string) {
+	t.Helper()
+	if strings.TrimSpace(os.Getenv(key)) != "" {
+		return
+	}
+	t.Setenv(key, value)
+}
+
 func getStringFromAnyMap(m map[string]any, key string) string {
 	if m == nil {
 		return ""
@@ -318,6 +359,39 @@ func getStringFromAnyMap(m map[string]any, key string) string {
 		return ""
 	}
 	return typed
+}
+
+func toSchemaMap(t *testing.T, value any) map[string]any {
+	t.Helper()
+	raw, err := json.Marshal(value)
+	if err != nil {
+		t.Fatalf("marshal schema: %v", err)
+	}
+	var out map[string]any
+	if err := json.Unmarshal(raw, &out); err != nil {
+		t.Fatalf("unmarshal schema: %v", err)
+	}
+	return out
+}
+
+func toMap(value any) map[string]any {
+	m, _ := value.(map[string]any)
+	return m
+}
+
+func toStringSlice(value any) []string {
+	list, ok := value.([]any)
+	if !ok {
+		return nil
+	}
+	out := make([]string, 0, len(list))
+	for _, item := range list {
+		text, _ := item.(string)
+		if text != "" {
+			out = append(out, text)
+		}
+	}
+	return out
 }
 
 func intFromAny(value any) (int, bool) {

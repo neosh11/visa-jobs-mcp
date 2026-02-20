@@ -149,17 +149,6 @@ func resolveToolHandler(name string) toolHandler {
 	}
 }
 
-func buildInputSchema(tool contract.ToolContract) map[string]any {
-	required := make([]string, 0, len(tool.RequiredInputs))
-	required = append(required, tool.RequiredInputs...)
-	return map[string]any{
-		"type":                 "object",
-		"properties":           map[string]any{},
-		"required":             required,
-		"additionalProperties": true,
-	}
-}
-
 func prettyJSON(value map[string]any) (string, error) {
 	content, err := json.MarshalIndent(value, "", "  ")
 	if err != nil {
