@@ -190,7 +190,9 @@ codex mcp get visa-jobs-mcp
     <ul>
       <li><code>get_mcp_capabilities</code></li>
       <li><code>set_user_preferences</code></li>
-      <li><code>find_visa_sponsored_jobs</code></li>
+      <li><code>start_visa_job_search</code></li>
+      <li><code>get_visa_job_search_status</code></li>
+      <li><code>get_visa_job_search_results</code></li>
       <li><code>save_job_for_later</code></li>
       <li><code>ignore_job</code></li>
     </ul>
@@ -241,7 +243,6 @@ codex mcp get visa-jobs-mcp
         <li><code>delete_user_data</code>: Permanently delete all local records for a user. (required: <code>user_id, confirm</code>; optional: <code>-</code>)</li>
         <li><code>get_best_contact_strategy</code>: Suggest best outreach channel/contact for a job. (required: <code>user_id</code>; optional: <code>-</code>)</li>
         <li><code>generate_outreach_message</code>: Generate a practical outreach draft tailored to user and role. (required: <code>user_id</code>; optional: <code>-</code>)</li>
-        <li><code>find_visa_sponsored_jobs</code>: Run a visa-focused search and return ranked eligible jobs. (required: <code>location, job_title, user_id</code>; optional: <code>offset, max_returned, session_id, refresh_session, auto_expand_scan, scan_multiplier, max_scan_results, strictness_mode</code>)</li>
         <li><code>start_visa_job_search</code>: Start a background search run for long scans. (required: <code>location, job_title, user_id</code>; optional: <code>-</code>)</li>
         <li><code>get_visa_job_search_status</code>: Poll incremental progress/events for a background search run. (required: <code>user_id, run_id</code>; optional: <code>-</code>)</li>
         <li><code>get_visa_job_search_results</code>: Fetch current result page from a background search run. (required: <code>user_id, run_id</code>; optional: <code>-</code>)</li>
@@ -306,7 +307,7 @@ codex mcp get visa-jobs-mcp
     &quot;search_run_ttl_seconds&quot;: 21600,
     &quot;search_session_ttl_seconds&quot;: 21600,
     &quot;strictness_mode&quot;: &quot;strict&quot;,
-    &quot;tool_call_soft_timeout_seconds&quot;: 55
+    &quot;tool_call_soft_timeout_seconds&quot;: 48
   },
   &quot;deprecations&quot;: [
     {
@@ -611,25 +612,6 @@ codex mcp get visa-jobs-mcp
       &quot;description&quot;: &quot;Generate a practical outreach draft tailored to user and role.&quot;,
       &quot;name&quot;: &quot;generate_outreach_message&quot;,
       &quot;required_inputs&quot;: [
-        &quot;user_id&quot;
-      ]
-    },
-    {
-      &quot;description&quot;: &quot;Run a visa-focused search and return ranked eligible jobs.&quot;,
-      &quot;name&quot;: &quot;find_visa_sponsored_jobs&quot;,
-      &quot;optional_inputs&quot;: [
-        &quot;offset&quot;,
-        &quot;max_returned&quot;,
-        &quot;session_id&quot;,
-        &quot;refresh_session&quot;,
-        &quot;auto_expand_scan&quot;,
-        &quot;scan_multiplier&quot;,
-        &quot;max_scan_results&quot;,
-        &quot;strictness_mode&quot;
-      ],
-      &quot;required_inputs&quot;: [
-        &quot;location&quot;,
-        &quot;job_title&quot;,
         &quot;user_id&quot;
       ]
     },

@@ -53,7 +53,9 @@ In a new Codex session, ask naturally:
 ## Core MCP Tools
 
 - `set_user_preferences`
-- `find_visa_sponsored_jobs`
+- `start_visa_job_search`
+- `get_visa_job_search_status`
+- `get_visa_job_search_results`
 - `save_job_for_later`
 - `ignore_job`
 - `list_saved_jobs`
@@ -113,7 +115,7 @@ Generated from `get_mcp_capabilities()` via `scripts/generate_contract_docs.py`.
 - `search_run_ttl_seconds`: `21600`
 - `search_session_ttl_seconds`: `21600`
 - `strictness_mode`: `strict`
-- `tool_call_soft_timeout_seconds`: `55`
+- `tool_call_soft_timeout_seconds`: `48`
 
 ### Tools
 | Tool | Description | Required Inputs | Optional Inputs |
@@ -146,7 +148,6 @@ Generated from `get_mcp_capabilities()` via `scripts/generate_contract_docs.py`.
 | `delete_user_data` | Permanently delete all local records for a user. | `user_id`, `confirm` | - |
 | `get_best_contact_strategy` | Suggest best outreach channel/contact for a job. | `user_id` | - |
 | `generate_outreach_message` | Generate a practical outreach draft tailored to user and role. | `user_id` | - |
-| `find_visa_sponsored_jobs` | Run a visa-focused search and return ranked eligible jobs. | `location`, `job_title`, `user_id` | `offset`, `max_returned`, `session_id`, `refresh_session`, `auto_expand_scan`, `scan_multiplier`, `max_scan_results`, `strictness_mode` |
 | `start_visa_job_search` | Start a background search run for long scans. | `location`, `job_title`, `user_id` | - |
 | `get_visa_job_search_status` | Poll incremental progress/events for a background search run. | `user_id`, `run_id` | - |
 | `get_visa_job_search_results` | Fetch current result page from a background search run. | `user_id`, `run_id` | - |
@@ -213,7 +214,7 @@ Generated from `get_mcp_capabilities()` via `scripts/generate_contract_docs.py`.
     "search_run_ttl_seconds": 21600,
     "search_session_ttl_seconds": 21600,
     "strictness_mode": "strict",
-    "tool_call_soft_timeout_seconds": 55
+    "tool_call_soft_timeout_seconds": 48
   },
   "deprecations": [
     {
@@ -522,25 +523,6 @@ Generated from `get_mcp_capabilities()` via `scripts/generate_contract_docs.py`.
       ]
     },
     {
-      "description": "Run a visa-focused search and return ranked eligible jobs.",
-      "name": "find_visa_sponsored_jobs",
-      "optional_inputs": [
-        "offset",
-        "max_returned",
-        "session_id",
-        "refresh_session",
-        "auto_expand_scan",
-        "scan_multiplier",
-        "max_scan_results",
-        "strictness_mode"
-      ],
-      "required_inputs": [
-        "location",
-        "job_title",
-        "user_id"
-      ]
-    },
-    {
       "description": "Start a background search run for long scans.",
       "name": "start_visa_job_search",
       "required_inputs": [
@@ -632,7 +614,7 @@ visa-jobs-mcp
 
 ## Troubleshooting
 
-- If search returns no jobs, retry the same `find_visa_sponsored_jobs` call with the same `session_id`.
+- If search returns no jobs, keep polling `get_visa_job_search_status` and call `get_visa_job_search_results` again for the same `run_id`.
 - If upstream rate limits happen, wait a few minutes and retry.
 - If Homebrew install fails due missing release assets, retry after release workflows complete.
 

@@ -90,15 +90,11 @@ def test_mcp_stdio_requires_user_preferences() -> None:
                 "id": 2,
                 "method": "tools/call",
                 "params": {
-                    "name": "find_visa_sponsored_jobs",
+                    "name": "start_visa_job_search",
                     "arguments": {
                         "user_id": "pytest-smoke-user",
                         "location": "New York, NY",
                         "job_title": "Software Engineer",
-                        "sites": ["linkedin"],
-                        "max_returned": 1,
-                        "results_wanted": 5,
-                        "hours_old": 24,
                     },
                 },
             },

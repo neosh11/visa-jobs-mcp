@@ -360,7 +360,7 @@ def _resolve_job_reference(
         resolved = result_index[f"{sid}:{rid}"]
     else:
         raise ValueError(
-            "Unknown result_id for this session. Pass a result_id returned by find_visa_sponsored_jobs."
+            "Unknown result_id for this session. Pass a result_id returned by get_visa_job_search_results."
         )
 
     resolved_url = str(resolved.get("job_url", "")).strip()

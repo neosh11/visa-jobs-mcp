@@ -227,7 +227,7 @@ def test_get_mcp_capabilities_exposes_agent_contract() -> None:
     assert caps["defaults"]["rate_limit_retry_window_seconds"] == 180
     tool_names = {t["name"] for t in caps["tools"]}
     assert all(str(t.get("description", "")).strip() for t in caps["tools"])
-    assert "find_visa_sponsored_jobs" in tool_names
+    assert "find_visa_sponsored_jobs" not in tool_names
     assert "get_user_readiness" in tool_names
     assert "save_job_for_later" in tool_names
     assert "ignore_job" in tool_names
@@ -594,7 +594,7 @@ def test_find_jobs_honors_tool_call_time_budget_and_returns_retry_hint(tmp_path:
 
     assert result["stats"]["accepted_jobs"] == 0
     assert result["agent_guidance"]["retry_hint_when_no_results"] is not None
-    assert result["agent_guidance"]["retry_hint_when_no_results"]["tool"] == "find_visa_sponsored_jobs"
+    assert result["agent_guidance"]["retry_hint_when_no_results"]["tool"] == "get_visa_job_search_results"
     assert result["agent_guidance"]["retry_hint_when_no_results"]["refresh_session"] is False
 
 

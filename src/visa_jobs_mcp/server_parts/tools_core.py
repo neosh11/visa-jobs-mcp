@@ -33,7 +33,6 @@ TOOL_DESCRIPTIONS: dict[str, str] = {
     "delete_user_data": "Permanently delete all local records for a user.",
     "get_best_contact_strategy": "Suggest best outreach channel/contact for a job.",
     "generate_outreach_message": "Generate a practical outreach draft tailored to user and role.",
-    "find_visa_sponsored_jobs": "Run a visa-focused search and return ranked eligible jobs.",
     "start_visa_job_search": "Start a background search run for long scans.",
     "get_visa_job_search_status": "Poll incremental progress/events for a background search run.",
     "get_visa_job_search_results": "Fetch current result page from a background search run.",
@@ -147,20 +146,6 @@ def get_mcp_capabilities() -> dict[str, Any]:
             tool_contract_entry(name="delete_user_data", required_inputs=["user_id", "confirm"]),
             tool_contract_entry(name="get_best_contact_strategy", required_inputs=["user_id"]),
             tool_contract_entry(name="generate_outreach_message", required_inputs=["user_id"]),
-            tool_contract_entry(
-                name="find_visa_sponsored_jobs",
-                required_inputs=["location", "job_title", "user_id"],
-                optional_inputs=[
-                    "offset",
-                    "max_returned",
-                    "session_id",
-                    "refresh_session",
-                    "auto_expand_scan",
-                    "scan_multiplier",
-                    "max_scan_results",
-                    "strictness_mode",
-                ],
-            ),
             tool_contract_entry(
                 name="start_visa_job_search",
                 required_inputs=["location", "job_title", "user_id"],
@@ -446,7 +431,7 @@ def get_user_readiness(
     action_items: list[str] = []
     if not has_preferences:
         action_items.append(
-            "Call set_user_preferences first (required before find_visa_sponsored_jobs)."
+            "Call set_user_preferences first (required before start_visa_job_search)."
         )
     if not dataset_exists:
         action_items.append(

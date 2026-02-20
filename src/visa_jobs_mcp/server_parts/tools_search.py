@@ -92,7 +92,9 @@ def build_feedback_summary(
             f"('{search_session_id}') and offset={int(next_offset)}."
         )
     if returned_jobs == 0:
-        actions.append("Retry find_visa_sponsored_jobs with the same session_id to continue scanning.")
+        actions.append(
+            "Continue polling get_visa_job_search_status, then call get_visa_job_search_results again."
+        )
     if recovery_suggestions:
         actions.append("If still sparse, ask user approval for one recovery_suggestion.")
     if call_budget_exhausted:
@@ -383,7 +385,6 @@ def _load_search_run_for_user(*, run_id: str, user_id: str) -> dict[str, Any]:
         return _clone_run_payload(record)
 
 
-@mcp.tool()
 def find_visa_sponsored_jobs(
     location: str,
     job_title: str,
@@ -893,8 +894,8 @@ def find_visa_sponsored_jobs(
                 "If a search fails with a rate-limit error, wait a few minutes and retry the same call."
             ),
             "if_no_results_retry_same_call": (
-                "If no jobs are returned, retry find_visa_sponsored_jobs with the same session_id. "
-                "The server will continue the scan from where it left off."
+                "If no jobs are returned, continue polling get_visa_job_search_status and then "
+                "call get_visa_job_search_results for the same run_id."
             ),
             "long_search_guidance": (
                 "If your MCP client has a short tool timeout, use start_visa_job_search and poll "
@@ -912,7 +913,7 @@ def find_visa_sponsored_jobs(
             ),
             "next_call_hint": (
                 {
-                    "tool": "find_visa_sponsored_jobs",
+                    "tool": "get_visa_job_search_results",
                     "session_id": search_session_id,
                     "offset": int(next_offset),
                     "max_returned": int(max_returned),
@@ -922,7 +923,7 @@ def find_visa_sponsored_jobs(
             ),
             "retry_hint_when_no_results": (
                 {
-                    "tool": "find_visa_sponsored_jobs",
+                    "tool": "get_visa_job_search_results",
                     "session_id": search_session_id,
                     "offset": 0,
                     "max_returned": int(max_returned),
