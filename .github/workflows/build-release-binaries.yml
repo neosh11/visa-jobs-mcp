@@ -33,6 +33,14 @@ jobs:
             target_goos: darwin
             target_goarch: amd64
             target_platform: macos-x86_64
+          - name: linux-arm64
+            target_goos: linux
+            target_goarch: arm64
+            target_platform: linux-arm64
+          - name: linux-x86_64
+            target_goos: linux
+            target_goarch: amd64
+            target_platform: linux-x86_64
           - name: windows-x86_64
             target_goos: windows
             target_goarch: amd64
@@ -46,7 +54,9 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: go.mod
-          cache: true
+          # Release runs should be deterministic and warning-free.
+          # Avoid cache restore warnings from stale/corrupted cache archives.
+          cache: false
 
       - name: Build binaries
         shell: bash

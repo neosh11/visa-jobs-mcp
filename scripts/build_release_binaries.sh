@@ -110,6 +110,16 @@ if [[ "${TARGET_GOOS}" == "windows" ]]; then
   BIN_NAME="visa-jobs-mcp.exe"
 fi
 
+write_sha256() {
+  local input_file="$1"
+  local output_file="$2"
+  if command -v shasum >/dev/null 2>&1; then
+    shasum -a 256 "${input_file}" > "${output_file}"
+  else
+    sha256sum "${input_file}" > "${output_file}"
+  fi
+}
+
 rm -rf "$BUILD_ROOT" "$DIST_ROOT" "$PACKAGE_ROOT" "$RELEASE_ROOT"
 mkdir -p "$BUILD_ROOT" "$DIST_ROOT" "$PACKAGE_ROOT/data" "$RELEASE_ROOT"
 
@@ -129,11 +139,24 @@ fi
 
 ARTIFACT="visa-jobs-mcp-v${VERSION}-${TARGET_PLATFORM}.tar.gz"
 tar -czf "$RELEASE_ROOT/$ARTIFACT" -C "$PACKAGE_ROOT" .
+write_sha256 "$RELEASE_ROOT/$ARTIFACT" "$RELEASE_ROOT/$ARTIFACT.sha256"
 
-if command -v shasum >/dev/null 2>&1; then
-  shasum -a 256 "$RELEASE_ROOT/$ARTIFACT" > "$RELEASE_ROOT/$ARTIFACT.sha256"
-else
-  sha256sum "$RELEASE_ROOT/$ARTIFACT" > "$RELEASE_ROOT/$ARTIFACT.sha256"
+if [[ "${TARGET_GOOS}" == "windows" ]]; then
+  ZIP_ARTIFACT="visa-jobs-mcp-v${VERSION}-${TARGET_PLATFORM}.zip"
+  python3 - <<'PY' "$PACKAGE_ROOT" "$RELEASE_ROOT/$ZIP_ARTIFACT"
+import pathlib
+import sys
+import zipfile
+
+package_root = pathlib.Path(sys.argv[1])
+zip_path = pathlib.Path(sys.argv[2])
+
+with zipfile.ZipFile(zip_path, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+    for path in package_root.rglob("*"):
+        if path.is_file():
+            zf.write(path, path.relative_to(package_root))
+PY
+  write_sha256 "$RELEASE_ROOT/$ZIP_ARTIFACT" "$RELEASE_ROOT/$ZIP_ARTIFACT.sha256"
 fi
 
 echo "Built release artifacts:"

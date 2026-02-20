@@ -146,11 +146,18 @@
 
     <hr>
 
-    <h2>Install</h2>
+    <h2>Install on macOS (Homebrew)</h2>
     <pre><code>brew tap neosh11/visa-jobs-mcp
 brew install neosh11/visa-jobs-mcp/visa-jobs-mcp
 </code></pre>
-    <p>Windows: download the <code>windows-x86_64</code> asset from Releases and add <code>visa-jobs-mcp.exe</code> to your <code>PATH</code>.</p>
+
+    <h2>Install on macOS/Linux (bash)</h2>
+    <pre><code>curl -fsSL https://raw.githubusercontent.com/neosh11/visa-jobs-mcp/main/scripts/install.sh | bash
+</code></pre>
+
+    <h2>Install on Windows (PowerShell)</h2>
+    <pre><code>irm https://raw.githubusercontent.com/neosh11/visa-jobs-mcp/main/scripts/install.ps1 | iex
+</code></pre>
     <p>
       Homebrew tap:
       <a href="https://github.com/neosh11/homebrew-visa-jobs-mcp">github.com/neosh11/homebrew-visa-jobs-mcp</a>
@@ -158,9 +165,14 @@ brew install neosh11/visa-jobs-mcp/visa-jobs-mcp
       Current release: <code>v0.3.1</code>
     </p>
 
-    <h2>Configure in Codex</h2>
+    <h2>Configure in Codex (macOS/Linux)</h2>
     <pre><code>codex mcp add visa-jobs-mcp --env VISA_JOB_SITES=linkedin -- /opt/homebrew/bin/visa-jobs-mcp
-codex mcp add visa-jobs-mcp --env VISA_JOB_SITES=linkedin -- visa-jobs-mcp.exe
+codex mcp list
+codex mcp get visa-jobs-mcp
+</code></pre>
+
+    <h2>Configure in Codex (Windows)</h2>
+    <pre><code>codex mcp add visa-jobs-mcp --env VISA_JOB_SITES=linkedin -- "$env:LOCALAPPDATA\\Programs\\visa-jobs-mcp\\bin\\visa-jobs-mcp.exe"
 codex mcp list
 codex mcp get visa-jobs-mcp
 </code></pre>

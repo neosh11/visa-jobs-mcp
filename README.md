@@ -19,22 +19,41 @@ brew tap neosh11/visa-jobs-mcp
 brew install neosh11/visa-jobs-mcp/visa-jobs-mcp
 ```
 
-### 1b. Install on Windows (direct binary)
+### 2. Install on macOS/Linux (bash installer)
 
-1. Download the latest `windows-x86_64` release asset from [Releases](https://github.com/neosh11/visa-jobs-mcp/releases).
-2. Extract the archive.
-3. Put `visa-jobs-mcp.exe` somewhere on your `PATH`.
+```bash
+curl -fsSL https://raw.githubusercontent.com/neosh11/visa-jobs-mcp/main/scripts/install.sh | bash
+```
 
-### 2. Register in Codex
+Pin a specific version:
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/neosh11/visa-jobs-mcp/main/scripts/install.sh | bash -s -- --version 0.3.1
+```
+
+### 3. Install on Windows (PowerShell installer)
+
+```powershell
+irm https://raw.githubusercontent.com/neosh11/visa-jobs-mcp/main/scripts/install.ps1 | iex
+```
+
+Pin a specific version:
+
+```powershell
+$env:VISA_JOBS_MCP_VERSION = "0.3.1"
+irm https://raw.githubusercontent.com/neosh11/visa-jobs-mcp/main/scripts/install.ps1 | iex
+```
+
+### 4. Register in Codex (macOS/Linux)
 
 ```bash
 codex mcp add visa-jobs-mcp --env VISA_JOB_SITES=linkedin -- visa-jobs-mcp
 ```
 
-Windows (PowerShell):
+Register in Codex (Windows PowerShell):
 
 ```powershell
-codex mcp add visa-jobs-mcp --env VISA_JOB_SITES=linkedin -- visa-jobs-mcp.exe
+codex mcp add visa-jobs-mcp --env VISA_JOB_SITES=linkedin -- "$env:LOCALAPPDATA\\Programs\\visa-jobs-mcp\\bin\\visa-jobs-mcp.exe"
 ```
 
 Verify:
@@ -44,7 +63,7 @@ codex mcp list
 codex mcp get visa-jobs-mcp
 ```
 
-### 3. Use it in chat
+### 5. Use it in chat
 
 In a new Codex session, ask naturally:
 

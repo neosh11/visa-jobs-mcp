@@ -92,10 +92,14 @@ python -m visa_jobs_mcp.pipeline_cli --help
 - Homebrew users should run the packaged `visa-jobs-mcp` binary.
 - Release artifacts are built from Go (`scripts/build_release_binaries.sh`) and bundle `data/companies.csv`.
 - Release workflow (`.github/workflows/build-release-binaries.yml`) runs on `v*` tags and now handles:
-  - cross-platform binary builds on Ubuntu runners (`macos-arm64`, `macos-x86_64`, `windows-x86_64`)
+  - cross-platform binary builds on Ubuntu runners (`macos-arm64`, `macos-x86_64`, `linux-arm64`, `linux-x86_64`, `windows-x86_64`)
   - GitHub release asset publishing
   - GitHub Pages deployment
 - Prefer release assets for Windows installs (`visa-jobs-mcp.exe` + bundled `data/companies.csv`).
+- Keep install scripts up to date:
+  - `scripts/install.sh` (macOS/Linux, curl | bash)
+  - `scripts/install.ps1` (Windows, irm | iex)
+- Keep macOS/Linux and Windows instructions clearly separated in both `README.md` and `index.html`.
 - `scripts/release_tag.sh <version>` runs `go test ./...` by default; set `RUN_PYTHON_TESTS=1` to also run pipeline Python tests.
 - Keep install instructions in `README.md` accurate and copy-pasteable.
 - Do not commit personal paths, temp folders, or PII.
