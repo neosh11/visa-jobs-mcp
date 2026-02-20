@@ -67,6 +67,11 @@ go test -race ./...
 go run ./cmd/visa-jobs-mcp --version
 ```
 
+Manual live LinkedIn E2E (networked, opt-in):
+```bash
+./scripts/run_live_linkedin_e2e.sh
+```
+
 Run MCP server over stdio:
 ```bash
 go run ./cmd/visa-jobs-mcp

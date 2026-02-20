@@ -54,6 +54,20 @@ If you need to refresh `data/companies.csv` from source, run:
 
 Note: MCP runtime is Go-only. Python is only needed for maintainers running the internal dataset pipeline.
 
+### Live LinkedIn E2E (manual)
+
+Run a real end-to-end search against LinkedIn (not stubbed tests):
+
+```bash
+./scripts/run_live_linkedin_e2e.sh
+```
+
+Optional timeout override:
+
+```bash
+VISA_E2E_TEST_TIMEOUT=8m ./scripts/run_live_linkedin_e2e.sh
+```
+
 ## What It Supports
 
 - LinkedIn-only search.
