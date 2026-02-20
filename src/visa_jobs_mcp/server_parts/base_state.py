@@ -235,6 +235,134 @@ def _ignored_job_url_set(user_id: str) -> set[str]:
     }
 
 
+def _ignored_companies_store_path(path: str | None = None) -> str:
+    return path or DEFAULT_IGNORED_COMPANIES_PATH
+
+
+def _load_ignored_companies(path: str | None = None) -> dict[str, Any]:
+    companies_file = Path(_ignored_companies_store_path(path))
+    if not companies_file.exists():
+        return {"users": {}}
+    try:
+        data = json.loads(companies_file.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {"users": {}}
+    if not isinstance(data, dict):
+        return {"users": {}}
+    users = data.get("users")
+    if not isinstance(users, dict):
+        data["users"] = {}
+    return data
+
+
+def _save_ignored_companies(data: dict[str, Any], path: str | None = None) -> None:
+    companies_file = Path(_ignored_companies_store_path(path))
+    companies_file.parent.mkdir(parents=True, exist_ok=True)
+    companies_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
+def _normalize_company_key(name: str | None) -> str:
+    if not name:
+        return ""
+    text = str(name).strip()
+    if text.lower() in {"nan", "none", "null", "na", "n/a"}:
+        return ""
+    cleaned = re.sub(r"[^A-Za-z0-9\\s]", " ", text.lower())
+    tokens = [t for t in cleaned.split() if t]
+    while tokens and tokens[-1] in LEGAL_SUFFIXES:
+        tokens.pop()
+    return " ".join(tokens)
+
+
+def _normalized_ignored_company(raw: Any) -> dict[str, Any] | None:
+    if not isinstance(raw, dict):
+        return None
+    try:
+        ignored_company_id = int(raw.get("id", 0))
+    except (TypeError, ValueError):
+        return None
+    if ignored_company_id < 1:
+        return None
+    company_name = str(raw.get("company_name", "")).strip()
+    normalized_company = str(raw.get("normalized_company", "")).strip()
+    if not normalized_company:
+        normalized_company = _normalize_company_key(company_name)
+    if not normalized_company:
+        return None
+    return {
+        "id": ignored_company_id,
+        "company_name": company_name,
+        "normalized_company": normalized_company,
+        "reason": str(raw.get("reason", "")).strip(),
+        "source": str(raw.get("source", "")).strip(),
+        "ignored_at_utc": str(raw.get("ignored_at_utc", "")).strip(),
+        "updated_at_utc": str(raw.get("updated_at_utc", "")).strip(),
+    }
+
+
+def _ensure_ignored_companies_entry(data: dict[str, Any], user_id: str) -> dict[str, Any]:
+    users = data.setdefault("users", {})
+    if not isinstance(users, dict):
+        users = {}
+        data["users"] = users
+
+    entry = users.get(user_id)
+    if not isinstance(entry, dict):
+        entry = {}
+        users[user_id] = entry
+
+    raw_companies = entry.get("companies")
+    if not isinstance(raw_companies, list):
+        raw_companies = []
+
+    companies = [company for company in (_normalized_ignored_company(item) for item in raw_companies) if company]
+    companies = sorted(companies, key=lambda company: company["id"])
+    entry["companies"] = companies
+
+    max_existing_id = max((company["id"] for company in companies), default=0)
+    try:
+        next_id = int(entry.get("next_id", 1))
+    except (TypeError, ValueError):
+        next_id = 1
+    if next_id < 1:
+        next_id = 1
+    if next_id <= max_existing_id:
+        next_id = max_existing_id + 1
+    entry["next_id"] = next_id
+    return entry
+
+
+def _get_ignored_companies_entry(data: dict[str, Any], user_id: str) -> dict[str, Any] | None:
+    users = data.get("users")
+    if not isinstance(users, dict):
+        return None
+    entry = users.get(user_id)
+    if not isinstance(entry, dict):
+        return None
+    raw_companies = entry.get("companies")
+    if not isinstance(raw_companies, list):
+        raw_companies = []
+    companies = [company for company in (_normalized_ignored_company(item) for item in raw_companies) if company]
+    companies = sorted(companies, key=lambda company: company["id"])
+    entry["companies"] = companies
+    return entry
+
+
+def _ignored_company_name_set(user_id: str) -> set[str]:
+    uid = user_id.strip()
+    if not uid:
+        return set()
+    data = _load_ignored_companies()
+    entry = _get_ignored_companies_entry(data, uid)
+    if not entry:
+        return set()
+    return {
+        company.get("normalized_company", "").strip()
+        for company in entry["companies"]
+        if company.get("normalized_company", "").strip()
+    }
+
+
 def _normalized_blob_line(raw: Any) -> dict[str, Any] | None:
     if not isinstance(raw, dict):
         return None
@@ -319,4 +447,3 @@ def _get_required_user_visa_types(user_id: str) -> list[str]:
             f"user_id='{uid}' has no preferred_visa_types. Set visa preferences first using set_user_preferences."
         )
     return sorted({_normalize_visa_type(v) for v in stored})
-

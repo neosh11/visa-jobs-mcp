@@ -56,7 +56,7 @@ _export_module_symbols(_base, include_private_functions=True)
 _export_module_symbols(_tools_core, include_private_functions=False)
 _export_module_symbols(_tools_jobs_core, include_private_functions=False)
 _export_module_symbols(_tools_jobs_data, include_private_functions=False)
-_export_module_symbols(_tools_search, include_private_functions=False)
+_export_module_symbols(_tools_search, include_private_functions=True)
 
 
 def main() -> None:

@@ -1,13 +1,71 @@
 from __future__ import annotations
 
 from .base import *  # noqa: F401,F403
+from visa_jobs_mcp import __version__ as PACKAGE_VERSION
+
+
+TOOL_DESCRIPTIONS: dict[str, str] = {
+    "set_user_preferences": "Save the user's visa preferences required before search.",
+    "set_user_constraints": "Save urgency and work-mode constraints used for personalized guidance.",
+    "get_user_preferences": "Fetch the saved user preferences and constraints.",
+    "get_user_readiness": "Report whether the user and local dataset are ready for search.",
+    "find_related_titles": "Return adjacent role titles to widen low-yield searches.",
+    "add_user_memory_line": "Append a profile memory line (skills, goals, fears, constraints).",
+    "query_user_memory_blob": "Query the user's local memory blob with optional text filtering.",
+    "delete_user_memory_line": "Delete one memory line by id from the local blob.",
+    "save_job_for_later": "Save a job to the user's local shortlist for follow-up.",
+    "list_saved_jobs": "List saved jobs in reverse-chronological order.",
+    "delete_saved_job": "Remove one saved job from the local shortlist.",
+    "ignore_job": "Hide one job from future results for this user.",
+    "list_ignored_jobs": "List ignored jobs in reverse-chronological order.",
+    "unignore_job": "Unhide a previously ignored job by id.",
+    "ignore_company": "Hide all jobs from a company in future searches.",
+    "list_ignored_companies": "List ignored companies in reverse-chronological order.",
+    "unignore_company": "Remove one company from the ignored list.",
+    "mark_job_applied": "Mark a job as applied and persist pipeline state.",
+    "update_job_stage": "Update lifecycle stage for a tracked job (saved/applied/interview/etc).",
+    "list_jobs_by_stage": "List tracked jobs filtered by lifecycle stage.",
+    "add_job_note": "Attach or append a note to a tracked job record.",
+    "list_recent_job_events": "List recent stage transitions and lifecycle events.",
+    "get_job_pipeline_summary": "Summarize tracked pipeline counts by stage for one user.",
+    "clear_search_session": "Delete one cached search session or all sessions for a user.",
+    "export_user_data": "Export all local records for a user across stores.",
+    "delete_user_data": "Permanently delete all local records for a user.",
+    "get_best_contact_strategy": "Suggest best outreach channel/contact for a job.",
+    "generate_outreach_message": "Generate a practical outreach draft tailored to user and role.",
+    "find_visa_sponsored_jobs": "Run a visa-focused search and return ranked eligible jobs.",
+    "start_visa_job_search": "Start a background search run for long scans.",
+    "get_visa_job_search_status": "Poll incremental progress/events for a background search run.",
+    "get_visa_job_search_results": "Fetch current result page from a background search run.",
+    "cancel_visa_job_search": "Request cancellation of an in-progress background run.",
+    "discover_latest_dol_disclosure_urls": "Discover latest DOL LCA/PERM disclosure sources.",
+    "run_internal_dol_pipeline": "Run internal pipeline to refresh sponsor-company dataset.",
+    "refresh_company_dataset_cache": "Clear and reload in-memory company dataset cache.",
+}
+
+
+def tool_contract_entry(
+    *,
+    name: str,
+    required_inputs: list[str],
+    optional_inputs: list[str] | None = None,
+) -> dict[str, Any]:
+    entry: dict[str, Any] = {
+        "name": name,
+        "description": TOOL_DESCRIPTIONS.get(name, ""),
+        "required_inputs": required_inputs,
+    }
+    if optional_inputs:
+        entry["optional_inputs"] = optional_inputs
+    return entry
+
 
 @mcp.tool()
 def get_mcp_capabilities() -> dict[str, Any]:
     """Return machine-readable MCP capability metadata for agents."""
     return {
         "server": "visa-jobs-mcp",
-        "version": __version__,
+        "version": PACKAGE_VERSION,
         "capabilities_schema_version": CAPABILITIES_SCHEMA_VERSION,
         "confidence_model_version": CONFIDENCE_MODEL_VERSION,
         "design_decisions": {
@@ -24,8 +82,10 @@ def get_mcp_capabilities() -> dict[str, Any]:
             "strict_user_visa_match": True,
             "strictness_modes_supported": sorted(SUPPORTED_STRICTNESS_MODES),
             "search_sessions_local_persistence": True,
+            "background_search_runs_local_persistence": True,
             "saved_jobs_local_persistence": True,
             "ignored_jobs_local_persistence": True,
+            "ignored_companies_local_persistence": True,
             "first_class_job_management": True,
             "rate_limit_backoff_retries": True,
         },
@@ -36,6 +96,7 @@ def get_mcp_capabilities() -> dict[str, Any]:
         "defaults": {
             "search_session_ttl_seconds": int(DEFAULT_SEARCH_SESSION_TTL_SECONDS),
             "max_search_sessions_per_user": int(DEFAULT_MAX_SEARCH_SESSIONS_PER_USER),
+            "search_run_ttl_seconds": int(DEFAULT_SEARCH_RUN_TTL_SECONDS),
             "scan_multiplier": int(DEFAULT_SCAN_MULTIPLIER),
             "max_scan_results": int(DEFAULT_MAX_SCAN_RESULTS),
             "strictness_mode": "strict",
@@ -47,43 +108,49 @@ def get_mcp_capabilities() -> dict[str, Any]:
             "rate_limit_max_backoff_seconds": int(DEFAULT_RATE_LIMIT_MAX_BACKOFF_SECONDS),
         },
         "tools": [
-            {"name": "set_user_preferences", "required_inputs": ["user_id", "preferred_visa_types"]},
-            {"name": "set_user_constraints", "required_inputs": ["user_id"]},
-            {"name": "get_user_preferences", "required_inputs": ["user_id"]},
-            {"name": "get_user_readiness", "required_inputs": ["user_id"]},
-            {"name": "find_related_titles", "required_inputs": ["job_title"]},
-            {"name": "add_user_memory_line", "required_inputs": ["user_id", "content"]},
-            {"name": "query_user_memory_blob", "required_inputs": ["user_id"]},
-            {"name": "delete_user_memory_line", "required_inputs": ["user_id", "line_id"]},
-            {
-                "name": "save_job_for_later",
-                "required_inputs": ["user_id"],
-                "optional_inputs": ["job_url", "result_id", "session_id"],
-            },
-            {"name": "list_saved_jobs", "required_inputs": ["user_id"]},
-            {"name": "delete_saved_job", "required_inputs": ["user_id", "saved_job_id"]},
-            {
-                "name": "ignore_job",
-                "required_inputs": ["user_id"],
-                "optional_inputs": ["job_url", "result_id", "session_id"],
-            },
-            {"name": "list_ignored_jobs", "required_inputs": ["user_id"]},
-            {"name": "unignore_job", "required_inputs": ["user_id", "ignored_job_id"]},
-            {"name": "mark_job_applied", "required_inputs": ["user_id"]},
-            {"name": "update_job_stage", "required_inputs": ["user_id", "stage"]},
-            {"name": "list_jobs_by_stage", "required_inputs": ["user_id", "stage"]},
-            {"name": "add_job_note", "required_inputs": ["user_id", "note"]},
-            {"name": "list_recent_job_events", "required_inputs": ["user_id"]},
-            {"name": "get_job_pipeline_summary", "required_inputs": ["user_id"]},
-            {"name": "clear_search_session", "required_inputs": ["user_id"]},
-            {"name": "export_user_data", "required_inputs": ["user_id"]},
-            {"name": "delete_user_data", "required_inputs": ["user_id", "confirm"]},
-            {"name": "get_best_contact_strategy", "required_inputs": ["user_id"]},
-            {"name": "generate_outreach_message", "required_inputs": ["user_id"]},
-            {
-                "name": "find_visa_sponsored_jobs",
-                "required_inputs": ["location", "job_title", "user_id"],
-                "optional_inputs": [
+            tool_contract_entry(
+                name="set_user_preferences",
+                required_inputs=["user_id", "preferred_visa_types"],
+            ),
+            tool_contract_entry(name="set_user_constraints", required_inputs=["user_id"]),
+            tool_contract_entry(name="get_user_preferences", required_inputs=["user_id"]),
+            tool_contract_entry(name="get_user_readiness", required_inputs=["user_id"]),
+            tool_contract_entry(name="find_related_titles", required_inputs=["job_title"]),
+            tool_contract_entry(name="add_user_memory_line", required_inputs=["user_id", "content"]),
+            tool_contract_entry(name="query_user_memory_blob", required_inputs=["user_id"]),
+            tool_contract_entry(name="delete_user_memory_line", required_inputs=["user_id", "line_id"]),
+            tool_contract_entry(
+                name="save_job_for_later",
+                required_inputs=["user_id"],
+                optional_inputs=["job_url", "result_id", "session_id"],
+            ),
+            tool_contract_entry(name="list_saved_jobs", required_inputs=["user_id"]),
+            tool_contract_entry(name="delete_saved_job", required_inputs=["user_id", "saved_job_id"]),
+            tool_contract_entry(
+                name="ignore_job",
+                required_inputs=["user_id"],
+                optional_inputs=["job_url", "result_id", "session_id"],
+            ),
+            tool_contract_entry(name="list_ignored_jobs", required_inputs=["user_id"]),
+            tool_contract_entry(name="unignore_job", required_inputs=["user_id", "ignored_job_id"]),
+            tool_contract_entry(name="ignore_company", required_inputs=["user_id"]),
+            tool_contract_entry(name="list_ignored_companies", required_inputs=["user_id"]),
+            tool_contract_entry(name="unignore_company", required_inputs=["user_id", "ignored_company_id"]),
+            tool_contract_entry(name="mark_job_applied", required_inputs=["user_id"]),
+            tool_contract_entry(name="update_job_stage", required_inputs=["user_id", "stage"]),
+            tool_contract_entry(name="list_jobs_by_stage", required_inputs=["user_id", "stage"]),
+            tool_contract_entry(name="add_job_note", required_inputs=["user_id", "note"]),
+            tool_contract_entry(name="list_recent_job_events", required_inputs=["user_id"]),
+            tool_contract_entry(name="get_job_pipeline_summary", required_inputs=["user_id"]),
+            tool_contract_entry(name="clear_search_session", required_inputs=["user_id"]),
+            tool_contract_entry(name="export_user_data", required_inputs=["user_id"]),
+            tool_contract_entry(name="delete_user_data", required_inputs=["user_id", "confirm"]),
+            tool_contract_entry(name="get_best_contact_strategy", required_inputs=["user_id"]),
+            tool_contract_entry(name="generate_outreach_message", required_inputs=["user_id"]),
+            tool_contract_entry(
+                name="find_visa_sponsored_jobs",
+                required_inputs=["location", "job_title", "user_id"],
+                optional_inputs=[
                     "offset",
                     "max_returned",
                     "session_id",
@@ -93,10 +160,17 @@ def get_mcp_capabilities() -> dict[str, Any]:
                     "max_scan_results",
                     "strictness_mode",
                 ],
-            },
-            {"name": "discover_latest_dol_disclosure_urls", "required_inputs": []},
-            {"name": "run_internal_dol_pipeline", "required_inputs": []},
-            {"name": "refresh_company_dataset_cache", "required_inputs": []},
+            ),
+            tool_contract_entry(
+                name="start_visa_job_search",
+                required_inputs=["location", "job_title", "user_id"],
+            ),
+            tool_contract_entry(name="get_visa_job_search_status", required_inputs=["user_id", "run_id"]),
+            tool_contract_entry(name="get_visa_job_search_results", required_inputs=["user_id", "run_id"]),
+            tool_contract_entry(name="cancel_visa_job_search", required_inputs=["user_id", "run_id"]),
+            tool_contract_entry(name="discover_latest_dol_disclosure_urls", required_inputs=[]),
+            tool_contract_entry(name="run_internal_dol_pipeline", required_inputs=[]),
+            tool_contract_entry(name="refresh_company_dataset_cache", required_inputs=[]),
         ],
         "search_response_fields_for_agents": [
             "jobs[].result_id",
@@ -104,6 +178,7 @@ def get_mcp_capabilities() -> dict[str, Any]:
             "jobs[].employer_contacts",
             "jobs[].visa_counts",
             "jobs[].visas_sponsored",
+            "jobs[].visa_match_strength",
             "jobs[].eligibility_reasons",
             "jobs[].confidence_score",
             "jobs[].confidence_model_version",
@@ -111,6 +186,9 @@ def get_mcp_capabilities() -> dict[str, Any]:
             "jobs[].matched_via_company_dataset",
             "jobs[].matched_via_job_description",
             "jobs[].matches_user_visa_preferences",
+            "search_progress",
+            "feedback_summary",
+            "personalization_notes",
             "search_session",
             "stats",
             "agent_guidance",
@@ -143,8 +221,10 @@ def get_mcp_capabilities() -> dict[str, Any]:
             "user_preferences_default": DEFAULT_USER_PREFS_PATH,
             "user_memory_blob_default": DEFAULT_USER_BLOB_PATH,
             "search_session_store_default": DEFAULT_SEARCH_SESSION_PATH,
+            "search_runs_store_default": DEFAULT_SEARCH_RUNS_PATH,
             "saved_jobs_default": DEFAULT_SAVED_JOBS_PATH,
             "ignored_jobs_default": DEFAULT_IGNORED_JOBS_PATH,
+            "ignored_companies_default": DEFAULT_IGNORED_COMPANIES_PATH,
             "job_management_db_default": DEFAULT_JOB_DB_PATH,
         },
     }
@@ -322,6 +402,23 @@ def get_user_readiness(
 
     ignored_jobs_entry = _get_ignored_jobs_entry(_load_ignored_jobs(), uid) or {}
     ignored_jobs_count = len(ignored_jobs_entry.get("jobs", []))
+    ignored_companies_entry = _get_ignored_companies_entry(_load_ignored_companies(), uid) or {}
+    ignored_companies_count = len(ignored_companies_entry.get("companies", []))
+    runs_store = _prune_search_runs(_load_search_runs())
+    runs = runs_store.get("runs", {})
+    active_search_runs_count = 0
+    if isinstance(runs, dict):
+        for record in runs.values():
+            if not isinstance(record, dict):
+                continue
+            query = record.get("query", {})
+            if not isinstance(query, dict):
+                continue
+            if str(query.get("user_id", "")).strip() != uid:
+                continue
+            status = str(record.get("status", "")).strip().lower()
+            if status in {"pending", "running", "cancelling"}:
+                active_search_runs_count += 1
     _ensure_job_management_ready()
     stage_counts = {stage: 0 for stage in sorted(VALID_JOB_STAGES)}
     with _job_db_conn() as conn:
@@ -371,6 +468,8 @@ def get_user_readiness(
             "memory_lines_count": int(memory_lines_count),
             "saved_jobs_count": int(saved_jobs_count),
             "ignored_jobs_count": int(ignored_jobs_count),
+            "ignored_companies_count": int(ignored_companies_count),
+            "active_search_runs_count": int(active_search_runs_count),
             "job_stage_counts": stage_counts,
             "applied_jobs_count": int(stage_counts.get("applied", 0)),
         },
@@ -382,6 +481,8 @@ def get_user_readiness(
             "memory_blob_path": DEFAULT_USER_BLOB_PATH,
             "saved_jobs_path": DEFAULT_SAVED_JOBS_PATH,
             "ignored_jobs_path": DEFAULT_IGNORED_JOBS_PATH,
+            "ignored_companies_path": DEFAULT_IGNORED_COMPANIES_PATH,
+            "search_runs_path": DEFAULT_SEARCH_RUNS_PATH,
             "job_db_path": DEFAULT_JOB_DB_PATH,
         },
         "next_actions": action_items,
@@ -708,4 +809,3 @@ def delete_user_memory_line(user_id: str, line_id: int) -> dict[str, Any]:
         "total_lines": len(remaining),
         "path": DEFAULT_USER_BLOB_PATH,
     }
-

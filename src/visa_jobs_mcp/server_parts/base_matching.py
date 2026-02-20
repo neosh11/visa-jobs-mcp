@@ -314,6 +314,31 @@ def _build_recovery_suggestions(
     return suggestions
 
 
+def _visa_match_strength(
+    *,
+    desired_visa_set: set[str],
+    company_matches_requested_visa: bool,
+    desc_matches_requested_visa: bool,
+    desc_generic_sponsorship: bool,
+    matched_company: bool,
+    has_positive: bool,
+) -> str:
+    if desired_visa_set:
+        if company_matches_requested_visa:
+            return "strong"
+        if desc_matches_requested_visa:
+            return "medium"
+        if desc_generic_sponsorship:
+            return "weak"
+        return "weak"
+
+    if matched_company:
+        return "strong"
+    if has_positive:
+        return "medium"
+    return "weak"
+
+
 def _evaluate_scraped_jobs(
     raw_jobs: pd.DataFrame,
     sponsor_df: pd.DataFrame,
@@ -455,6 +480,14 @@ def _evaluate_scraped_jobs(
         if contactability_score > 0:
             confidence_score += 0.05
         confidence_score = min(1.0, round(confidence_score, 2))
+        visa_match_strength = _visa_match_strength(
+            desired_visa_set=desired_visa_set,
+            company_matches_requested_visa=company_matches_requested_visa,
+            desc_matches_requested_visa=desc_matches_requested_visa,
+            desc_generic_sponsorship=desc_generic_sponsorship,
+            matched_company=matched_company,
+            has_positive=has_positive,
+        )
 
         results.append(
             EvaluatedJob(
@@ -473,6 +506,7 @@ def _evaluate_scraped_jobs(
                 visa_counts=visa_counts,
                 visas_sponsored=visas_sponsored,
                 matches_user_visa_preferences=matches_user_visa_preferences,
+                visa_match_strength=visa_match_strength,
                 eligibility_reasons=eligibility_reasons,
                 confidence_score=confidence_score,
                 confidence_model_version=CONFIDENCE_MODEL_VERSION,
@@ -487,5 +521,4 @@ def _evaluate_scraped_jobs(
         key=lambda job: (job.confidence_score, job.contactability_score),
         reverse=True,
     )
-
 

@@ -89,6 +89,12 @@ DEFAULT_SEARCH_SESSION_PATH = os.getenv(
 DEFAULT_SEARCH_SESSION_TTL_SECONDS = _env_int("VISA_SEARCH_SESSION_TTL_SECONDS", 21600)
 DEFAULT_MAX_SEARCH_SESSIONS = _env_int("VISA_MAX_SEARCH_SESSIONS", 200)
 DEFAULT_MAX_SEARCH_SESSIONS_PER_USER = _env_int("VISA_MAX_SEARCH_SESSIONS_PER_USER", 20)
+DEFAULT_SEARCH_RUNS_PATH = os.getenv(
+    "VISA_SEARCH_RUNS_PATH",
+    "data/config/search_runs.json",
+)
+DEFAULT_SEARCH_RUN_TTL_SECONDS = _env_int("VISA_SEARCH_RUN_TTL_SECONDS", 21600)
+DEFAULT_MAX_SEARCH_RUNS = _env_int("VISA_MAX_SEARCH_RUNS", 500)
 DEFAULT_SAVED_JOBS_PATH = os.getenv(
     "VISA_SAVED_JOBS_PATH",
     "data/config/saved_jobs.json",
@@ -96,6 +102,10 @@ DEFAULT_SAVED_JOBS_PATH = os.getenv(
 DEFAULT_IGNORED_JOBS_PATH = os.getenv(
     "VISA_IGNORED_JOBS_PATH",
     "data/config/ignored_jobs.json",
+)
+DEFAULT_IGNORED_COMPANIES_PATH = os.getenv(
+    "VISA_IGNORED_COMPANIES_PATH",
+    "data/config/ignored_companies.json",
 )
 DEFAULT_JOB_DB_PATH = os.getenv(
     "VISA_JOB_DB_PATH",
@@ -260,6 +270,7 @@ class EvaluatedJob:
     visa_counts: dict[str, int]
     visas_sponsored: list[str]
     matches_user_visa_preferences: bool
+    visa_match_strength: str
     eligibility_reasons: list[str]
     confidence_score: float
     confidence_model_version: str
@@ -455,6 +466,32 @@ def _load_search_sessions(path: str | None = None) -> dict[str, Any]:
 
 def _save_search_sessions(data: dict[str, Any], path: str | None = None) -> None:
     store_file = Path(_search_session_store_path(path))
+    store_file.parent.mkdir(parents=True, exist_ok=True)
+    store_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
+
+
+def _search_run_store_path(path: str | None = None) -> str:
+    return path or DEFAULT_SEARCH_RUNS_PATH
+
+
+def _load_search_runs(path: str | None = None) -> dict[str, Any]:
+    store_file = Path(_search_run_store_path(path))
+    if not store_file.exists():
+        return {"runs": {}}
+    try:
+        data = json.loads(store_file.read_text(encoding="utf-8"))
+    except json.JSONDecodeError:
+        return {"runs": {}}
+    if not isinstance(data, dict):
+        return {"runs": {}}
+    runs = data.get("runs")
+    if not isinstance(runs, dict):
+        data["runs"] = {}
+    return data
+
+
+def _save_search_runs(data: dict[str, Any], path: str | None = None) -> None:
+    store_file = Path(_search_run_store_path(path))
     store_file.parent.mkdir(parents=True, exist_ok=True)
     store_file.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
@@ -911,4 +948,3 @@ def _resolve_job_management_target_in_conn(
     )
     job_record = _get_job_by_id_in_conn(conn, uid, upserted_id) or {}
     return upserted_id, job_record
-

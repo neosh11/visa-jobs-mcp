@@ -156,6 +156,37 @@ def _prune_search_sessions(
     return data
 
 
+def _prune_search_runs(
+    data: dict[str, Any],
+    max_runs: int = DEFAULT_MAX_SEARCH_RUNS,
+) -> dict[str, Any]:
+    runs = data.get("runs")
+    if not isinstance(runs, dict):
+        data["runs"] = {}
+        return data
+
+    now = datetime.now(timezone.utc)
+    valid: dict[str, dict[str, Any]] = {}
+    for run_id, record in runs.items():
+        if not isinstance(record, dict):
+            continue
+        expires_at = _parse_utc_iso(record.get("expires_at_utc"))
+        if expires_at and expires_at <= now:
+            continue
+        valid[run_id] = record
+
+    def sort_key(item: tuple[str, dict[str, Any]]) -> datetime:
+        dt = _parse_utc_iso(item[1].get("updated_at_utc")) or _parse_utc_iso(item[1].get("created_at_utc"))
+        return dt or datetime.fromtimestamp(0, tz=timezone.utc)
+
+    if max_runs > 0 and len(valid) > max_runs:
+        ordered = sorted(valid.items(), key=sort_key, reverse=True)[:max_runs]
+        valid = {run_id: record for run_id, record in ordered}
+
+    data["runs"] = valid
+    return data
+
+
 def _enforce_user_session_limit(
     data: dict[str, Any],
     user_id: str,
@@ -254,6 +285,7 @@ def _build_result_id_index(accepted_jobs: list[dict[str, Any]]) -> dict[str, dic
             "employer_contacts": item.get("employer_contacts", []),
             "visa_counts": item.get("visa_counts", {}),
             "visas_sponsored": item.get("visas_sponsored", []),
+            "visa_match_strength": item.get("visa_match_strength", ""),
             "eligibility_reasons": item.get("eligibility_reasons", []),
             "confidence_score": item.get("confidence_score"),
             "confidence_model_version": item.get("confidence_model_version"),

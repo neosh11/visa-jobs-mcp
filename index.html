@@ -3,21 +3,54 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light dark">
   <title>Visa Jobs MCP</title>
   <meta name="description" content="Free, private, agent-native MCP server for visa-targeted job search.">
   <style>
     :root {
-      --bg-dark: #111213;
-      --fg-light: #d6d6d6;
-      --matrix-green: #39ff14;
+      --bg: #0f1112;
+      --fg: #e8e8e8;
+      --link: #39ff14;
+      --muted: #1a1d1f;
+      --border: #2a2d2f;
+      --focus: #89ff70;
+    }
+
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f9fafb;
+        --fg: #17191b;
+        --link: #0b7a24;
+        --muted: #f1f3f5;
+        --border: #d5dade;
+        --focus: #0b7a24;
+      }
+    }
+
+    :root[data-theme="dark"] {
+      --bg: #0f1112;
+      --fg: #e8e8e8;
+      --link: #39ff14;
+      --muted: #1a1d1f;
+      --border: #2a2d2f;
+      --focus: #89ff70;
+    }
+
+    :root[data-theme="light"] {
+      --bg: #f9fafb;
+      --fg: #17191b;
+      --link: #0b7a24;
+      --muted: #f1f3f5;
+      --border: #d5dade;
+      --focus: #0b7a24;
     }
 
     body {
       padding: 0 10px;
       margin: 50px auto;
       max-width: 650px;
-      background-color: var(--bg-dark);
-      color: var(--fg-light);
+      background-color: var(--bg);
+      color: var(--fg);
       font-family:
         "SF Mono", "SFMono-Regular", ui-monospace,
         Menlo, Consolas, "Liberation Mono", monospace;
@@ -32,8 +65,36 @@
       margin: 15px auto;
     }
 
+    .topbar {
+      display: flex;
+      justify-content: flex-end;
+      margin-bottom: 8px;
+    }
+
+    .theme-toggle {
+      background: var(--muted);
+      color: var(--fg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 6px 10px;
+      cursor: pointer;
+      font: inherit;
+      font-size: 0.85rem;
+      line-height: 1.2;
+    }
+
+    .theme-toggle:hover {
+      text-decoration: underline;
+    }
+
+    .theme-toggle:focus-visible,
+    a:focus-visible {
+      outline: 2px solid var(--focus);
+      outline-offset: 2px;
+    }
+
     a {
-      color: var(--matrix-green);
+      color: var(--link);
       text-decoration: none;
     }
 
@@ -49,14 +110,14 @@
     pre {
       margin: 8px 0 14px 0;
       padding: 10px 12px;
-      border: 1px solid #2a2d2f;
-      background: #17191b;
+      border: 1px solid var(--border);
+      background: var(--muted);
       border-radius: 6px;
       overflow-x: auto;
     }
 
     pre code {
-      color: var(--fg-light);
+      color: var(--fg);
       background: transparent;
       border: 0;
       border-radius: 0;
@@ -64,8 +125,8 @@
     }
 
     code {
-      background: #1a1c1e;
-      border: 1px solid #2a2d2f;
+      background: var(--muted);
+      border: 1px solid var(--border);
       border-radius: 4px;
       padding: 1px 5px;
     }
@@ -73,6 +134,9 @@
 </head>
 <body>
   <div id="maincontent" style="margin-top: 70px">
+    <div class="topbar">
+      <button id="theme-toggle" class="theme-toggle" type="button" aria-label="Toggle color theme">Theme: Auto</button>
+    </div>
     <h1>Visa Jobs MCP</h1>
     <p><strong>Always free.</strong> <strong>Completely private.</strong> <strong>Built for agents.</strong></p>
     <p>
@@ -90,7 +154,7 @@ brew install neosh11/visa-jobs-mcp/visa-jobs-mcp
       Homebrew tap:
       <a href="https://github.com/neosh11/homebrew-visa-jobs-mcp">github.com/neosh11/homebrew-visa-jobs-mcp</a>
       <br>
-      Current release: <code>v0.2.6</code>
+      Current release: <code>v0.2.7</code>
     </p>
 
     <h2>Configure in Codex</h2>
@@ -131,6 +195,500 @@ codex mcp get visa-jobs-mcp
       <li><code>ignore_job</code></li>
     </ul>
 
+    <h2>MCP Contract (Generated)</h2>
+    <!-- MCP_CONTRACT:START -->
+    <details>
+      <summary><strong>Expand MCP Contract</strong> (auto-generated)</summary>
+      <p>Generated from <code>get_mcp_capabilities()</code>.</p>
+      <p><strong>Server</strong></p>
+      <ul>
+        <li><code>server</code>: <code>visa-jobs-mcp</code></li>
+        <li><code>version</code>: <code>0.2.7</code></li>
+        <li><code>capabilities_schema_version</code>: <code>1.1.0</code></li>
+      </ul>
+      <p><strong>Required Before Search</strong></p>
+      <ul>
+        <li><code>tool</code>: <code>set_user_preferences</code></li>
+        <li><code>required_fields</code>: <code>user_id</code>, <code>preferred_visa_types</code></li>
+      </ul>
+      <p><strong>Tools</strong></p>
+      <ul>
+        <li><code>set_user_preferences</code>: Save the user&#x27;s visa preferences required before search. (required: <code>user_id, preferred_visa_types</code>; optional: <code>-</code>)</li>
+        <li><code>set_user_constraints</code>: Save urgency and work-mode constraints used for personalized guidance. (required: <code>user_id</code>; optional: <code>-</code>)</li>
+        <li><code>get_user_preferences</code>: Fetch the saved user preferences and constraints. (required: <code>user_id</code>; optional: <code>-</code>)</li>
+        <li><code>get_user_readiness</code>: Report whether the user and local dataset are ready for search. (required: <code>user_id</code>; optional: <code>-</code>)</li>
+        <li><code>find_related_titles</code>: Return adjacent role titles to widen low-yield searches. (required: <code>job_title</code>; optional: <code>-</code>)</li>
+        <li><code>add_user_memory_line</code>: Append a profile memory line (skills, goals, fears, constraints). (required: <code>user_id, content</code>; optional: <code>-</code>)</li>
+        <li><code>query_user_memory_blob</code>: Query the user&#x27;s local memory blob with optional text filtering. (required: <code>user_id</code>; optional: <code>-</code>)</li>
+        <li><code>delete_user_memory_line</code>: Delete one memory line by id from the local blob. (required: <code>user_id, line_id</code>; optional: <code>-</code>)</li>
+        <li><code>save_job_for_later</code>: Save a job to the user&#x27;s local shortlist for follow-up. (required: <code>user_id</code>; optional: <code>job_url, result_id, session_id</code>)</li>
+        <li><code>list_saved_jobs</code>: List saved jobs in reverse-chronological order. (required: <code>user_id</code>; optional: <code>-</code>)</li>
+        <li><code>delete_saved_job</code>: Remove one saved job from the local shortlist. (required: <code>user_id, saved_job_id</code>; optional: <code>-</code>)</li>
+        <li><code>ignore_job</code>: Hide one job from future results for this user. (required: <code>user_id</code>; optional: <code>job_url, result_id, session_id</code>)</li>
+        <li><code>list_ignored_jobs</code>: List ignored jobs in reverse-chronological order. (required: <code>user_id</code>; optional: <code>-</code>)</li>
+        <li><code>unignore_job</code>: Unhide a previously ignored job by id. (required: <code>user_id, ignored_job_id</code>; optional: <code>-</code>)</li>
+        <li><code>ignore_company</code>: Hide all jobs from a company in future searches. (required: <code>user_id</code>; optional: <code>-</code>)</li>
+        <li><code>list_ignored_companies</code>: List ignored companies in reverse-chronological order. (required: <code>user_id</code>; optional: <code>-</code>)</li>
+        <li><code>unignore_company</code>: Remove one company from the ignored list. (required: <code>user_id, ignored_company_id</code>; optional: <code>-</code>)</li>
+        <li><code>mark_job_applied</code>: Mark a job as applied and persist pipeline state. (required: <code>user_id</code>; optional: <code>-</code>)</li>
+        <li><code>update_job_stage</code>: Update lifecycle stage for a tracked job (saved/applied/interview/etc). (required: <code>user_id, stage</code>; optional: <code>-</code>)</li>
+        <li><code>list_jobs_by_stage</code>: List tracked jobs filtered by lifecycle stage. (required: <code>user_id, stage</code>; optional: <code>-</code>)</li>
+        <li><code>add_job_note</code>: Attach or append a note to a tracked job record. (required: <code>user_id, note</code>; optional: <code>-</code>)</li>
+        <li><code>list_recent_job_events</code>: List recent stage transitions and lifecycle events. (required: <code>user_id</code>; optional: <code>-</code>)</li>
+        <li><code>get_job_pipeline_summary</code>: Summarize tracked pipeline counts by stage for one user. (required: <code>user_id</code>; optional: <code>-</code>)</li>
+        <li><code>clear_search_session</code>: Delete one cached search session or all sessions for a user. (required: <code>user_id</code>; optional: <code>-</code>)</li>
+        <li><code>export_user_data</code>: Export all local records for a user across stores. (required: <code>user_id</code>; optional: <code>-</code>)</li>
+        <li><code>delete_user_data</code>: Permanently delete all local records for a user. (required: <code>user_id, confirm</code>; optional: <code>-</code>)</li>
+        <li><code>get_best_contact_strategy</code>: Suggest best outreach channel/contact for a job. (required: <code>user_id</code>; optional: <code>-</code>)</li>
+        <li><code>generate_outreach_message</code>: Generate a practical outreach draft tailored to user and role. (required: <code>user_id</code>; optional: <code>-</code>)</li>
+        <li><code>find_visa_sponsored_jobs</code>: Run a visa-focused search and return ranked eligible jobs. (required: <code>location, job_title, user_id</code>; optional: <code>offset, max_returned, session_id, refresh_session, auto_expand_scan, scan_multiplier, max_scan_results, strictness_mode</code>)</li>
+        <li><code>start_visa_job_search</code>: Start a background search run for long scans. (required: <code>location, job_title, user_id</code>; optional: <code>-</code>)</li>
+        <li><code>get_visa_job_search_status</code>: Poll incremental progress/events for a background search run. (required: <code>user_id, run_id</code>; optional: <code>-</code>)</li>
+        <li><code>get_visa_job_search_results</code>: Fetch current result page from a background search run. (required: <code>user_id, run_id</code>; optional: <code>-</code>)</li>
+        <li><code>cancel_visa_job_search</code>: Request cancellation of an in-progress background run. (required: <code>user_id, run_id</code>; optional: <code>-</code>)</li>
+        <li><code>discover_latest_dol_disclosure_urls</code>: Discover latest DOL LCA/PERM disclosure sources. (required: <code>-</code>; optional: <code>-</code>)</li>
+        <li><code>run_internal_dol_pipeline</code>: Run internal pipeline to refresh sponsor-company dataset. (required: <code>-</code>; optional: <code>-</code>)</li>
+        <li><code>refresh_company_dataset_cache</code>: Clear and reload in-memory company dataset cache. (required: <code>-</code>; optional: <code>-</code>)</li>
+      </ul>
+      <p><strong>Search Response Fields</strong></p>
+      <ul>
+        <li><code>jobs[].result_id</code></li>
+        <li><code>jobs[].job_url</code></li>
+        <li><code>jobs[].employer_contacts</code></li>
+        <li><code>jobs[].visa_counts</code></li>
+        <li><code>jobs[].visas_sponsored</code></li>
+        <li><code>jobs[].visa_match_strength</code></li>
+        <li><code>jobs[].eligibility_reasons</code></li>
+        <li><code>jobs[].confidence_score</code></li>
+        <li><code>jobs[].confidence_model_version</code></li>
+        <li><code>jobs[].contactability_score</code></li>
+        <li><code>jobs[].matched_via_company_dataset</code></li>
+        <li><code>jobs[].matched_via_job_description</code></li>
+        <li><code>jobs[].matches_user_visa_preferences</code></li>
+        <li><code>search_progress</code></li>
+        <li><code>feedback_summary</code></li>
+        <li><code>personalization_notes</code></li>
+        <li><code>search_session</code></li>
+        <li><code>stats</code></li>
+        <li><code>agent_guidance</code></li>
+        <li><code>pagination</code></li>
+        <li><code>dataset_freshness</code></li>
+        <li><code>recovery_suggestions</code></li>
+      </ul>
+      <p><strong>Paths</strong></p>
+      <ul>
+        <li><code>dataset_default</code>: <code>data/companies.csv</code></li>
+        <li><code>ignored_companies_default</code>: <code>data/config/ignored_companies.json</code></li>
+        <li><code>ignored_jobs_default</code>: <code>data/config/ignored_jobs.json</code></li>
+        <li><code>job_management_db_default</code>: <code>data/app/visa_jobs.db</code></li>
+        <li><code>pipeline_manifest_default</code>: <code>data/pipeline/last_run.json</code></li>
+        <li><code>saved_jobs_default</code>: <code>data/config/saved_jobs.json</code></li>
+        <li><code>search_runs_store_default</code>: <code>data/config/search_runs.json</code></li>
+        <li><code>search_session_store_default</code>: <code>data/config/search_sessions.json</code></li>
+        <li><code>user_memory_blob_default</code>: <code>data/config/user_memory_blob.json</code></li>
+        <li><code>user_preferences_default</code>: <code>data/config/user_preferences.json</code></li>
+      </ul>
+      <details>
+        <summary>Raw Capabilities JSON</summary>
+        <pre><code>
+{
+  &quot;capabilities_schema_version&quot;: &quot;1.1.0&quot;,
+  &quot;confidence_model_version&quot;: &quot;v1.1.0-rules&quot;,
+  &quot;defaults&quot;: {
+    &quot;dataset_stale_after_days&quot;: 30,
+    &quot;job_db_path&quot;: &quot;data/app/visa_jobs.db&quot;,
+    &quot;max_scan_results&quot;: 1200,
+    &quot;max_search_sessions_per_user&quot;: 20,
+    &quot;rate_limit_initial_backoff_seconds&quot;: 2,
+    &quot;rate_limit_max_backoff_seconds&quot;: 30,
+    &quot;rate_limit_retry_window_seconds&quot;: 180,
+    &quot;scan_multiplier&quot;: 8,
+    &quot;search_run_ttl_seconds&quot;: 21600,
+    &quot;search_session_ttl_seconds&quot;: 21600,
+    &quot;strictness_mode&quot;: &quot;strict&quot;,
+    &quot;tool_call_soft_timeout_seconds&quot;: 55
+  },
+  &quot;deprecations&quot;: [
+    {
+      &quot;name&quot;: &quot;build_company_dataset_from_dol_disclosures&quot;,
+      &quot;replacement&quot;: &quot;run_internal_dol_pipeline&quot;,
+      &quot;status&quot;: &quot;soft_deprecated&quot;
+    }
+  ],
+  &quot;design_decisions&quot;: {
+    &quot;agent_is_reasoning_layer&quot;: true,
+    &quot;background_search_runs_local_persistence&quot;: true,
+    &quot;data_not_shared_or_sold&quot;: true,
+    &quot;first_class_job_management&quot;: true,
+    &quot;free_forever&quot;: true,
+    &quot;fresh_job_search_per_query&quot;: true,
+    &quot;ignored_companies_local_persistence&quot;: true,
+    &quot;ignored_jobs_local_persistence&quot;: true,
+    &quot;license&quot;: &quot;MIT&quot;,
+    &quot;llm_api_keys_required_by_mcp&quot;: false,
+    &quot;llm_runtime_inside_mcp&quot;: false,
+    &quot;no_fake_reviews_or_bot_marketing&quot;: true,
+    &quot;proxies_used&quot;: false,
+    &quot;rate_limit_backoff_retries&quot;: true,
+    &quot;saved_jobs_local_persistence&quot;: true,
+    &quot;search_sessions_local_persistence&quot;: true,
+    &quot;strict_user_visa_match&quot;: true,
+    &quot;strictness_modes_supported&quot;: [
+      &quot;balanced&quot;,
+      &quot;strict&quot;
+    ],
+    &quot;supported_job_sites&quot;: [
+      &quot;linkedin&quot;
+    ]
+  },
+  &quot;pagination_contract&quot;: {
+    &quot;next_step&quot;: &quot;use pagination.next_offset to request the next page&quot;,
+    &quot;offset_model&quot;: &quot;offset is applied to accepted jobs, not raw scraped jobs&quot;,
+    &quot;result_id_aliases&quot;: &quot;use jobs[].result_id in save_job_for_later/ignore_job to avoid URL copy friction&quot;,
+    &quot;scan_behavior&quot;: &quot;server can increase raw scan depth when auto_expand_scan=true&quot;,
+    &quot;session_behavior&quot;: &quot;pass search_session.session_id for stable paging without redundant rescans&quot;
+  },
+  &quot;paths&quot;: {
+    &quot;dataset_default&quot;: &quot;data/companies.csv&quot;,
+    &quot;ignored_companies_default&quot;: &quot;data/config/ignored_companies.json&quot;,
+    &quot;ignored_jobs_default&quot;: &quot;data/config/ignored_jobs.json&quot;,
+    &quot;job_management_db_default&quot;: &quot;data/app/visa_jobs.db&quot;,
+    &quot;pipeline_manifest_default&quot;: &quot;data/pipeline/last_run.json&quot;,
+    &quot;saved_jobs_default&quot;: &quot;data/config/saved_jobs.json&quot;,
+    &quot;search_runs_store_default&quot;: &quot;data/config/search_runs.json&quot;,
+    &quot;search_session_store_default&quot;: &quot;data/config/search_sessions.json&quot;,
+    &quot;user_memory_blob_default&quot;: &quot;data/config/user_memory_blob.json&quot;,
+    &quot;user_preferences_default&quot;: &quot;data/config/user_preferences.json&quot;
+  },
+  &quot;rate_limit_contract&quot;: {
+    &quot;failure_message&quot;: &quot;asks agent to retry shortly when the retry window is exhausted&quot;,
+    &quot;max_retry_window_seconds&quot;: 180,
+    &quot;retry_behavior&quot;: &quot;automatic exponential backoff on rate-limit errors (429/Too Many Requests)&quot;
+  },
+  &quot;required_before_search&quot;: {
+    &quot;required_fields&quot;: [
+      &quot;user_id&quot;,
+      &quot;preferred_visa_types&quot;
+    ],
+    &quot;tool&quot;: &quot;set_user_preferences&quot;
+  },
+  &quot;search_response_fields_for_agents&quot;: [
+    &quot;jobs[].result_id&quot;,
+    &quot;jobs[].job_url&quot;,
+    &quot;jobs[].employer_contacts&quot;,
+    &quot;jobs[].visa_counts&quot;,
+    &quot;jobs[].visas_sponsored&quot;,
+    &quot;jobs[].visa_match_strength&quot;,
+    &quot;jobs[].eligibility_reasons&quot;,
+    &quot;jobs[].confidence_score&quot;,
+    &quot;jobs[].confidence_model_version&quot;,
+    &quot;jobs[].contactability_score&quot;,
+    &quot;jobs[].matched_via_company_dataset&quot;,
+    &quot;jobs[].matched_via_job_description&quot;,
+    &quot;jobs[].matches_user_visa_preferences&quot;,
+    &quot;search_progress&quot;,
+    &quot;feedback_summary&quot;,
+    &quot;personalization_notes&quot;,
+    &quot;search_session&quot;,
+    &quot;stats&quot;,
+    &quot;agent_guidance&quot;,
+    &quot;pagination&quot;,
+    &quot;dataset_freshness&quot;,
+    &quot;recovery_suggestions&quot;
+  ],
+  &quot;server&quot;: &quot;visa-jobs-mcp&quot;,
+  &quot;tools&quot;: [
+    {
+      &quot;description&quot;: &quot;Save the user&#x27;s visa preferences required before search.&quot;,
+      &quot;name&quot;: &quot;set_user_preferences&quot;,
+      &quot;required_inputs&quot;: [
+        &quot;user_id&quot;,
+        &quot;preferred_visa_types&quot;
+      ]
+    },
+    {
+      &quot;description&quot;: &quot;Save urgency and work-mode constraints used for personalized guidance.&quot;,
+      &quot;name&quot;: &quot;set_user_constraints&quot;,
+      &quot;required_inputs&quot;: [
+        &quot;user_id&quot;
+      ]
+    },
+    {
+      &quot;description&quot;: &quot;Fetch the saved user preferences and constraints.&quot;,
+      &quot;name&quot;: &quot;get_user_preferences&quot;,
+      &quot;required_inputs&quot;: [
+        &quot;user_id&quot;
+      ]
+    },
+    {
+      &quot;description&quot;: &quot;Report whether the user and local dataset are ready for search.&quot;,
+      &quot;name&quot;: &quot;get_user_readiness&quot;,
+      &quot;required_inputs&quot;: [
+        &quot;user_id&quot;
+      ]
+    },
+    {
+      &quot;description&quot;: &quot;Return adjacent role titles to widen low-yield searches.&quot;,
+      &quot;name&quot;: &quot;find_related_titles&quot;,
+      &quot;required_inputs&quot;: [
+        &quot;job_title&quot;
+      ]
+    },
+    {
+      &quot;description&quot;: &quot;Append a profile memory line (skills, goals, fears, constraints).&quot;,
+      &quot;name&quot;: &quot;add_user_memory_line&quot;,
+      &quot;required_inputs&quot;: [
+        &quot;user_id&quot;,
+        &quot;content&quot;
+      ]
+    },
+    {
+      &quot;description&quot;: &quot;Query the user&#x27;s local memory blob with optional text filtering.&quot;,
+      &quot;name&quot;: &quot;query_user_memory_blob&quot;,
+      &quot;required_inputs&quot;: [
+        &quot;user_id&quot;
+      ]
+    },
+    {
+      &quot;description&quot;: &quot;Delete one memory line by id from the local blob.&quot;,
+      &quot;name&quot;: &quot;delete_user_memory_line&quot;,
+      &quot;required_inputs&quot;: [
+        &quot;user_id&quot;,
+        &quot;line_id&quot;
+      ]
+    },
+    {
+      &quot;description&quot;: &quot;Save a job to the user&#x27;s local shortlist for follow-up.&quot;,
+      &quot;name&quot;: &quot;save_job_for_later&quot;,
+      &quot;optional_inputs&quot;: [
+        &quot;job_url&quot;,
+        &quot;result_id&quot;,
+        &quot;session_id&quot;
+      ],
+      &quot;required_inputs&quot;: [
+        &quot;user_id&quot;
+      ]
+    },
+    {
+      &quot;description&quot;: &quot;List saved jobs in reverse-chronological order.&quot;,
+      &quot;name&quot;: &quot;list_saved_jobs&quot;,
+      &quot;required_inputs&quot;: [
+        &quot;user_id&quot;
+      ]
+    },
+    {
+      &quot;description&quot;: &quot;Remove one saved job from the local shortlist.&quot;,
+      &quot;name&quot;: &quot;delete_saved_job&quot;,
+      &quot;required_inputs&quot;: [
+        &quot;user_id&quot;,
+        &quot;saved_job_id&quot;
+      ]
+    },
+    {
+      &quot;description&quot;: &quot;Hide one job from future results for this user.&quot;,
+      &quot;name&quot;: &quot;ignore_job&quot;,
+      &quot;optional_inputs&quot;: [
+        &quot;job_url&quot;,
+        &quot;result_id&quot;,
+        &quot;session_id&quot;
+      ],
+      &quot;required_inputs&quot;: [
+        &quot;user_id&quot;
+      ]
+    },
+    {
+      &quot;description&quot;: &quot;List ignored jobs in reverse-chronological order.&quot;,
+      &quot;name&quot;: &quot;list_ignored_jobs&quot;,
+      &quot;required_inputs&quot;: [
+        &quot;user_id&quot;
+      ]
+    },
+    {
+      &quot;description&quot;: &quot;Unhide a previously ignored job by id.&quot;,
+      &quot;name&quot;: &quot;unignore_job&quot;,
+      &quot;required_inputs&quot;: [
+        &quot;user_id&quot;,
+        &quot;ignored_job_id&quot;
+      ]
+    },
+    {
+      &quot;description&quot;: &quot;Hide all jobs from a company in future searches.&quot;,
+      &quot;name&quot;: &quot;ignore_company&quot;,
+      &quot;required_inputs&quot;: [
+        &quot;user_id&quot;
+      ]
+    },
+    {
+      &quot;description&quot;: &quot;List ignored companies in reverse-chronological order.&quot;,
+      &quot;name&quot;: &quot;list_ignored_companies&quot;,
+      &quot;required_inputs&quot;: [
+        &quot;user_id&quot;
+      ]
+    },
+    {
+      &quot;description&quot;: &quot;Remove one company from the ignored list.&quot;,
+      &quot;name&quot;: &quot;unignore_company&quot;,
+      &quot;required_inputs&quot;: [
+        &quot;user_id&quot;,
+        &quot;ignored_company_id&quot;
+      ]
+    },
+    {
+      &quot;description&quot;: &quot;Mark a job as applied and persist pipeline state.&quot;,
+      &quot;name&quot;: &quot;mark_job_applied&quot;,
+      &quot;required_inputs&quot;: [
+        &quot;user_id&quot;
+      ]
+    },
+    {
+      &quot;description&quot;: &quot;Update lifecycle stage for a tracked job (saved/applied/interview/etc).&quot;,
+      &quot;name&quot;: &quot;update_job_stage&quot;,
+      &quot;required_inputs&quot;: [
+        &quot;user_id&quot;,
+        &quot;stage&quot;
+      ]
+    },
+    {
+      &quot;description&quot;: &quot;List tracked jobs filtered by lifecycle stage.&quot;,
+      &quot;name&quot;: &quot;list_jobs_by_stage&quot;,
+      &quot;required_inputs&quot;: [
+        &quot;user_id&quot;,
+        &quot;stage&quot;
+      ]
+    },
+    {
+      &quot;description&quot;: &quot;Attach or append a note to a tracked job record.&quot;,
+      &quot;name&quot;: &quot;add_job_note&quot;,
+      &quot;required_inputs&quot;: [
+        &quot;user_id&quot;,
+        &quot;note&quot;
+      ]
+    },
+    {
+      &quot;description&quot;: &quot;List recent stage transitions and lifecycle events.&quot;,
+      &quot;name&quot;: &quot;list_recent_job_events&quot;,
+      &quot;required_inputs&quot;: [
+        &quot;user_id&quot;
+      ]
+    },
+    {
+      &quot;description&quot;: &quot;Summarize tracked pipeline counts by stage for one user.&quot;,
+      &quot;name&quot;: &quot;get_job_pipeline_summary&quot;,
+      &quot;required_inputs&quot;: [
+        &quot;user_id&quot;
+      ]
+    },
+    {
+      &quot;description&quot;: &quot;Delete one cached search session or all sessions for a user.&quot;,
+      &quot;name&quot;: &quot;clear_search_session&quot;,
+      &quot;required_inputs&quot;: [
+        &quot;user_id&quot;
+      ]
+    },
+    {
+      &quot;description&quot;: &quot;Export all local records for a user across stores.&quot;,
+      &quot;name&quot;: &quot;export_user_data&quot;,
+      &quot;required_inputs&quot;: [
+        &quot;user_id&quot;
+      ]
+    },
+    {
+      &quot;description&quot;: &quot;Permanently delete all local records for a user.&quot;,
+      &quot;name&quot;: &quot;delete_user_data&quot;,
+      &quot;required_inputs&quot;: [
+        &quot;user_id&quot;,
+        &quot;confirm&quot;
+      ]
+    },
+    {
+      &quot;description&quot;: &quot;Suggest best outreach channel/contact for a job.&quot;,
+      &quot;name&quot;: &quot;get_best_contact_strategy&quot;,
+      &quot;required_inputs&quot;: [
+        &quot;user_id&quot;
+      ]
+    },
+    {
+      &quot;description&quot;: &quot;Generate a practical outreach draft tailored to user and role.&quot;,
+      &quot;name&quot;: &quot;generate_outreach_message&quot;,
+      &quot;required_inputs&quot;: [
+        &quot;user_id&quot;
+      ]
+    },
+    {
+      &quot;description&quot;: &quot;Run a visa-focused search and return ranked eligible jobs.&quot;,
+      &quot;name&quot;: &quot;find_visa_sponsored_jobs&quot;,
+      &quot;optional_inputs&quot;: [
+        &quot;offset&quot;,
+        &quot;max_returned&quot;,
+        &quot;session_id&quot;,
+        &quot;refresh_session&quot;,
+        &quot;auto_expand_scan&quot;,
+        &quot;scan_multiplier&quot;,
+        &quot;max_scan_results&quot;,
+        &quot;strictness_mode&quot;
+      ],
+      &quot;required_inputs&quot;: [
+        &quot;location&quot;,
+        &quot;job_title&quot;,
+        &quot;user_id&quot;
+      ]
+    },
+    {
+      &quot;description&quot;: &quot;Start a background search run for long scans.&quot;,
+      &quot;name&quot;: &quot;start_visa_job_search&quot;,
+      &quot;required_inputs&quot;: [
+        &quot;location&quot;,
+        &quot;job_title&quot;,
+        &quot;user_id&quot;
+      ]
+    },
+    {
+      &quot;description&quot;: &quot;Poll incremental progress/events for a background search run.&quot;,
+      &quot;name&quot;: &quot;get_visa_job_search_status&quot;,
+      &quot;required_inputs&quot;: [
+        &quot;user_id&quot;,
+        &quot;run_id&quot;
+      ]
+    },
+    {
+      &quot;description&quot;: &quot;Fetch current result page from a background search run.&quot;,
+      &quot;name&quot;: &quot;get_visa_job_search_results&quot;,
+      &quot;required_inputs&quot;: [
+        &quot;user_id&quot;,
+        &quot;run_id&quot;
+      ]
+    },
+    {
+      &quot;description&quot;: &quot;Request cancellation of an in-progress background run.&quot;,
+      &quot;name&quot;: &quot;cancel_visa_job_search&quot;,
+      &quot;required_inputs&quot;: [
+        &quot;user_id&quot;,
+        &quot;run_id&quot;
+      ]
+    },
+    {
+      &quot;description&quot;: &quot;Discover latest DOL LCA/PERM disclosure sources.&quot;,
+      &quot;name&quot;: &quot;discover_latest_dol_disclosure_urls&quot;,
+      &quot;required_inputs&quot;: []
+    },
+    {
+      &quot;description&quot;: &quot;Run internal pipeline to refresh sponsor-company dataset.&quot;,
+      &quot;name&quot;: &quot;run_internal_dol_pipeline&quot;,
+      &quot;required_inputs&quot;: []
+    },
+    {
+      &quot;description&quot;: &quot;Clear and reload in-memory company dataset cache.&quot;,
+      &quot;name&quot;: &quot;refresh_company_dataset_cache&quot;,
+      &quot;required_inputs&quot;: []
+    }
+  ],
+  &quot;version&quot;: &quot;0.2.7&quot;
+}
+        </code></pre>
+      </details>
+    </details>
+<!-- MCP_CONTRACT:END -->
+
     <h2>Principles</h2>
     <p>
       No fake reviews. No bot marketing. No paywall. MIT licensed.
@@ -144,5 +702,57 @@ codex mcp get visa-jobs-mcp
       <a href="https://github.com/neosh11/homebrew-visa-jobs-mcp">Homebrew Tap</a>
     </p>
   </div>
+  <script>
+    (function () {
+      const root = document.documentElement;
+      const button = document.getElementById("theme-toggle");
+      if (!button) return;
+
+      const storageKey = "visa-jobs-theme";
+      const themes = ["auto", "dark", "light"];
+
+      function applyTheme(theme) {
+        if (theme === "auto") {
+          root.removeAttribute("data-theme");
+          button.textContent = "Theme: Auto";
+        } else {
+          root.setAttribute("data-theme", theme);
+          button.textContent = "Theme: " + (theme === "dark" ? "Dark" : "Light");
+        }
+      }
+
+      function nextTheme(current) {
+        const idx = themes.indexOf(current);
+        if (idx === -1) return "auto";
+        return themes[(idx + 1) % themes.length];
+      }
+
+      const stored = localStorage.getItem(storageKey);
+      const initial = themes.includes(stored) ? stored : "auto";
+      applyTheme(initial);
+
+      button.addEventListener("click", function () {
+        const current = localStorage.getItem(storageKey) || "auto";
+        const updated = nextTheme(current);
+        localStorage.setItem(storageKey, updated);
+        applyTheme(updated);
+      });
+
+      if (window.matchMedia) {
+        const media = window.matchMedia("(prefers-color-scheme: light)");
+        const onSystemThemeChange = function () {
+          const current = localStorage.getItem(storageKey) || "auto";
+          if (current === "auto") {
+            applyTheme("auto");
+          }
+        };
+        if (typeof media.addEventListener === "function") {
+          media.addEventListener("change", onSystemThemeChange);
+        } else if (typeof media.addListener === "function") {
+          media.addListener(onSystemThemeChange);
+        }
+      }
+    })();
+  </script>
 </body>
 </html>

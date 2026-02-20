@@ -12,7 +12,9 @@ from visa_jobs_mcp import server
 def _isolated_stores(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(server, "DEFAULT_SAVED_JOBS_PATH", str(tmp_path / "saved_jobs.json"))
     monkeypatch.setattr(server, "DEFAULT_IGNORED_JOBS_PATH", str(tmp_path / "ignored_jobs.json"))
+    monkeypatch.setattr(server, "DEFAULT_IGNORED_COMPANIES_PATH", str(tmp_path / "ignored_companies.json"))
     monkeypatch.setattr(server, "DEFAULT_SEARCH_SESSION_PATH", str(tmp_path / "search_sessions.json"))
+    monkeypatch.setattr(server, "DEFAULT_SEARCH_RUNS_PATH", str(tmp_path / "search_runs.json"))
     monkeypatch.setattr(server, "DEFAULT_JOB_DB_PATH", str(tmp_path / "job_management.db"))
 
 
@@ -131,3 +133,98 @@ def test_ignore_jobs_filters_search_results(tmp_path: Path, monkeypatch) -> None
     unignored = server.unignore_job(user_id="u1", ignored_job_id=1)
     assert unignored["deleted"] is True
     assert unignored["total_ignored_jobs"] == 0
+
+
+def test_ignore_companies_filters_search_results(tmp_path: Path, monkeypatch) -> None:
+    dataset = tmp_path / "companies.csv"
+    pd.DataFrame(
+        [
+            {
+                "company_tier": "dol",
+                "company_name": "Acme Inc.",
+                "h1b": 5,
+                "h1b1_chile": 0,
+                "h1b1_singapore": 0,
+                "e3_australian": 0,
+                "green_card": 0,
+            },
+            {
+                "company_tier": "dol",
+                "company_name": "Beta Systems",
+                "h1b": 2,
+                "h1b1_chile": 0,
+                "h1b1_singapore": 0,
+                "e3_australian": 0,
+                "green_card": 0,
+            },
+        ]
+    ).to_csv(dataset, index=False)
+    monkeypatch.setattr(server, "_load_user_prefs", lambda path="": {"u1": {"preferred_visa_types": ["h1b"]}})
+    monkeypatch.setattr(
+        server,
+        "scrape_jobs",
+        lambda **kwargs: pd.DataFrame(
+            [
+                {
+                    "title": "SE1",
+                    "company": "Acme Inc.",
+                    "location": "New York, NY",
+                    "site": "linkedin",
+                    "description": "General role",
+                    "job_url": "https://example.com/a",
+                    "date_posted": "2026-02-18",
+                },
+                {
+                    "title": "SE2",
+                    "company": "Beta Systems",
+                    "location": "New York, NY",
+                    "site": "linkedin",
+                    "description": "General role",
+                    "job_url": "https://example.com/b",
+                    "date_posted": "2026-02-18",
+                },
+                {
+                    "title": "SE3",
+                    "company": "Acme, Inc.",
+                    "location": "New York, NY",
+                    "site": "linkedin",
+                    "description": "General role",
+                    "job_url": "https://example.com/c",
+                    "date_posted": "2026-02-18",
+                },
+            ]
+        ),
+    )
+    server._load_company_dataset.cache_clear()
+
+    first = server.find_visa_sponsored_jobs(
+        location="New York, NY",
+        job_title="software engineer",
+        user_id="u1",
+        dataset_path=str(dataset),
+        max_returned=10,
+    )
+    assert {job["company"] for job in first["jobs"]} == {"Acme Inc.", "Beta Systems", "Acme, Inc."}
+
+    ignored = server.ignore_company(user_id="u1", result_id=first["jobs"][0]["result_id"], reason="not a fit")
+    assert ignored["action"] == "ignored_new"
+    assert ignored["ignored_company"]["normalized_company"] == "acme"
+
+    second = server.find_visa_sponsored_jobs(
+        location="New York, NY",
+        job_title="software engineer",
+        user_id="u1",
+        dataset_path=str(dataset),
+        max_returned=10,
+    )
+    assert [job["job_url"] for job in second["jobs"]] == ["https://example.com/b"]
+    assert second["stats"]["ignored_company_filtered_count"] == 2
+    assert second["agent_guidance"]["ignore_company_tool"] == "ignore_company"
+
+    listed = server.list_ignored_companies(user_id="u1")
+    assert listed["total_ignored_companies"] == 1
+    ignored_company_id = listed["companies"][0]["id"]
+
+    unignored = server.unignore_company(user_id="u1", ignored_company_id=ignored_company_id)
+    assert unignored["deleted"] is True
+    assert unignored["total_ignored_companies"] == 0

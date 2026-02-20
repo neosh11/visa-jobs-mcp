@@ -28,6 +28,14 @@ def export_user_data(user_id: str) -> dict[str, Any]:
     ignored_jobs = ignored_entry.get("jobs", []) if isinstance(ignored_entry, dict) else []
     if not isinstance(ignored_jobs, list):
         ignored_jobs = []
+    ignored_companies_entry = _get_ignored_companies_entry(_load_ignored_companies(), uid) or {}
+    ignored_companies = (
+        ignored_companies_entry.get("companies", [])
+        if isinstance(ignored_companies_entry, dict)
+        else []
+    )
+    if not isinstance(ignored_companies, list):
+        ignored_companies = []
 
     session_store = _prune_search_sessions(_load_search_sessions())
     sessions = session_store.get("sessions", {})
@@ -51,6 +59,31 @@ def export_user_data(user_id: str) -> dict[str, Any]:
                     "accepted_jobs_total": int(record.get("accepted_jobs_total", 0) or 0),
                     "latest_scan_target": int(record.get("latest_scan_target", 0) or 0),
                     "scan_exhausted": bool(record.get("scan_exhausted", False)),
+                }
+            )
+    runs_store = _prune_search_runs(_load_search_runs())
+    runs = runs_store.get("runs", {})
+    exported_runs: list[dict[str, Any]] = []
+    if isinstance(runs, dict):
+        for run_id, record in runs.items():
+            if not isinstance(record, dict):
+                continue
+            query = record.get("query", {})
+            if not isinstance(query, dict):
+                continue
+            if str(query.get("user_id", "")).strip() != uid:
+                continue
+            exported_runs.append(
+                {
+                    "run_id": run_id,
+                    "status": str(record.get("status", "")).strip(),
+                    "created_at_utc": record.get("created_at_utc"),
+                    "updated_at_utc": record.get("updated_at_utc"),
+                    "completed_at_utc": record.get("completed_at_utc"),
+                    "expires_at_utc": record.get("expires_at_utc"),
+                    "attempt_count": int(record.get("attempt_count", 0) or 0),
+                    "search_session_id": str(record.get("search_session_id", "")).strip(),
+                    "query": query,
                 }
             )
 
@@ -92,7 +125,9 @@ def export_user_data(user_id: str) -> dict[str, Any]:
             "memory_lines": memory_lines,
             "saved_jobs": saved_jobs,
             "ignored_jobs": ignored_jobs,
+            "ignored_companies": ignored_companies,
             "search_sessions": exported_sessions,
+            "search_runs": exported_runs,
             "job_management": {
                 "jobs": [_row_to_dict(row) for row in job_rows],
                 "applications": [_row_to_dict(row) for row in application_rows],
@@ -103,7 +138,9 @@ def export_user_data(user_id: str) -> dict[str, Any]:
             "memory_lines": len(memory_lines),
             "saved_jobs": len(saved_jobs),
             "ignored_jobs": len(ignored_jobs),
+            "ignored_companies": len(ignored_companies),
             "search_sessions": len(exported_sessions),
+            "search_runs": len(exported_runs),
             "job_management_jobs": len(job_rows),
             "job_management_applications": len(application_rows),
             "job_management_events": len(event_rows),
@@ -113,7 +150,9 @@ def export_user_data(user_id: str) -> dict[str, Any]:
             "memory_blob_path": DEFAULT_USER_BLOB_PATH,
             "saved_jobs_path": DEFAULT_SAVED_JOBS_PATH,
             "ignored_jobs_path": DEFAULT_IGNORED_JOBS_PATH,
+            "ignored_companies_path": DEFAULT_IGNORED_COMPANIES_PATH,
             "search_sessions_path": DEFAULT_SEARCH_SESSION_PATH,
+            "search_runs_path": DEFAULT_SEARCH_RUNS_PATH,
             "job_db_path": DEFAULT_JOB_DB_PATH,
         },
     }
@@ -133,7 +172,9 @@ def delete_user_data(user_id: str, confirm: bool = False) -> dict[str, Any]:
         "memory_lines": 0,
         "saved_jobs": 0,
         "ignored_jobs": 0,
+        "ignored_companies": 0,
         "search_sessions": 0,
+        "search_runs": 0,
         "job_management_jobs": 0,
         "job_management_applications": 0,
         "job_management_events": 0,
@@ -175,6 +216,16 @@ def delete_user_data(user_id: str, confirm: bool = False) -> dict[str, Any]:
                 deleted["ignored_jobs"] = len(jobs) if isinstance(jobs, list) else 0
                 _save_ignored_jobs(ignored_store)
 
+    ignored_companies_store = _load_ignored_companies()
+    if isinstance(ignored_companies_store, dict):
+        users = ignored_companies_store.get("users", {})
+        if isinstance(users, dict):
+            entry = users.pop(uid, None)
+            if isinstance(entry, dict):
+                companies = entry.get("companies", [])
+                deleted["ignored_companies"] = len(companies) if isinstance(companies, list) else 0
+                _save_ignored_companies(ignored_companies_store)
+
     session_store = _prune_search_sessions(_load_search_sessions())
     sessions = session_store.get("sessions", {})
     if isinstance(sessions, dict):
@@ -190,6 +241,22 @@ def delete_user_data(user_id: str, confirm: bool = False) -> dict[str, Any]:
             session_store["sessions"] = sessions
             _save_search_sessions(_prune_search_sessions(session_store))
         deleted["search_sessions"] = removed
+
+    runs_store = _prune_search_runs(_load_search_runs())
+    runs = runs_store.get("runs", {})
+    if isinstance(runs, dict):
+        removed = 0
+        for run_id, record in list(runs.items()):
+            if not isinstance(record, dict):
+                continue
+            query = record.get("query", {})
+            if isinstance(query, dict) and str(query.get("user_id", "")).strip() == uid:
+                runs.pop(run_id, None)
+                removed += 1
+        if removed > 0:
+            runs_store["runs"] = runs
+            _save_search_runs(_prune_search_runs(runs_store))
+        deleted["search_runs"] = removed
 
     _ensure_job_management_ready()
     with _job_db_conn() as conn:
@@ -218,9 +285,9 @@ def delete_user_data(user_id: str, confirm: bool = False) -> dict[str, Any]:
             "memory_blob_path": DEFAULT_USER_BLOB_PATH,
             "saved_jobs_path": DEFAULT_SAVED_JOBS_PATH,
             "ignored_jobs_path": DEFAULT_IGNORED_JOBS_PATH,
+            "ignored_companies_path": DEFAULT_IGNORED_COMPANIES_PATH,
             "search_sessions_path": DEFAULT_SEARCH_SESSION_PATH,
+            "search_runs_path": DEFAULT_SEARCH_RUNS_PATH,
             "job_db_path": DEFAULT_JOB_DB_PATH,
         },
     }
-
-

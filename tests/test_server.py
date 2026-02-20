@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
+import time
 
 import pandas as pd
 import pytest
@@ -15,8 +16,10 @@ def _isolated_search_session_store(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(server, "DEFAULT_USER_PREFS_PATH", str(tmp_path / "user_preferences.json"))
     monkeypatch.setattr(server, "DEFAULT_DOL_MANIFEST_PATH", str(tmp_path / "pipeline_manifest.json"))
     monkeypatch.setattr(server, "DEFAULT_SEARCH_SESSION_PATH", str(tmp_path / "search_sessions.json"))
+    monkeypatch.setattr(server, "DEFAULT_SEARCH_RUNS_PATH", str(tmp_path / "search_runs.json"))
     monkeypatch.setattr(server, "DEFAULT_SAVED_JOBS_PATH", str(tmp_path / "saved_jobs.json"))
     monkeypatch.setattr(server, "DEFAULT_IGNORED_JOBS_PATH", str(tmp_path / "ignored_jobs.json"))
+    monkeypatch.setattr(server, "DEFAULT_IGNORED_COMPANIES_PATH", str(tmp_path / "ignored_companies.json"))
     monkeypatch.setattr(server, "DEFAULT_JOB_DB_PATH", str(tmp_path / "job_management.db"))
 
 
@@ -111,11 +114,17 @@ def test_find_jobs_filters_by_company_and_description(tmp_path: Path, monkeypatc
 
     assert result["stats"]["scraped_jobs"] == 4
     assert result["stats"]["accepted_jobs"] == 2
+    assert isinstance(result["search_progress"], list)
+    assert result["search_progress"][-1]["phase"] == "done"
+    assert "why_this_set" in result["feedback_summary"]
+    assert isinstance(result["feedback_summary"]["what_to_do_next"], list)
+    assert isinstance(result["personalization_notes"], list)
     accepted_urls = {j["job_url"] for j in result["jobs"]}
     assert accepted_urls == {"https://example.com/1", "https://example.com/2"}
     acme_job = [j for j in result["jobs"] if j["job_url"] == "https://example.com/1"][0]
     assert acme_job["employer_contacts"][0]["email"] == "jane@acme.com"
     assert acme_job["confidence_score"] > 0.5
+    assert acme_job["visa_match_strength"] in {"strong", "medium", "weak"}
     assert any("Matches requested visa type" in reason for reason in acme_job["eligibility_reasons"])
 
 
@@ -217,10 +226,16 @@ def test_get_mcp_capabilities_exposes_agent_contract() -> None:
     assert caps["defaults"]["max_search_sessions_per_user"] == server.DEFAULT_MAX_SEARCH_SESSIONS_PER_USER
     assert caps["defaults"]["rate_limit_retry_window_seconds"] == 180
     tool_names = {t["name"] for t in caps["tools"]}
+    assert all(str(t.get("description", "")).strip() for t in caps["tools"])
     assert "find_visa_sponsored_jobs" in tool_names
     assert "get_user_readiness" in tool_names
     assert "save_job_for_later" in tool_names
     assert "ignore_job" in tool_names
+    assert "ignore_company" in tool_names
+    assert "start_visa_job_search" in tool_names
+    assert "get_visa_job_search_status" in tool_names
+    assert "get_visa_job_search_results" in tool_names
+    assert "cancel_visa_job_search" in tool_names
     assert "set_user_constraints" in tool_names
     assert "clear_search_session" in tool_names
     assert "export_user_data" in tool_names
@@ -231,10 +246,19 @@ def test_get_mcp_capabilities_exposes_agent_contract() -> None:
     assert "add_job_note" in tool_names
     assert "list_recent_job_events" in tool_names
     assert "get_job_pipeline_summary" in tool_names
+    assert "list_ignored_companies" in tool_names
+    assert "unignore_company" in tool_names
     assert "get_best_contact_strategy" in tool_names
     assert "generate_outreach_message" in tool_names
     assert "get_mcp_capabilities" not in tool_names  # list is intentional core user-facing tools
     assert "pagination_contract" in caps
+    search_fields = set(caps["search_response_fields_for_agents"])
+    assert "jobs[].visa_match_strength" in search_fields
+    assert "search_progress" in search_fields
+    assert "feedback_summary" in search_fields
+    assert "personalization_notes" in search_fields
+    assert caps["defaults"]["search_run_ttl_seconds"] == server.DEFAULT_SEARCH_RUN_TTL_SECONDS
+    assert caps["paths"]["search_runs_store_default"] == server.DEFAULT_SEARCH_RUNS_PATH
 
 
 def test_find_jobs_auto_expands_scan_for_later_pages(tmp_path: Path, monkeypatch) -> None:
@@ -346,6 +370,67 @@ def test_find_jobs_reuses_session_cache_for_follow_up_page(tmp_path: Path, monke
     assert page2["stats"]["cache_hit"] is True
     assert page2["search_session"]["reused_session"] is True
     assert len(page2["jobs"]) == 5
+
+
+def test_background_search_run_progress_and_results(tmp_path: Path, monkeypatch) -> None:
+    dataset = tmp_path / "companies.csv"
+    _write_dataset(dataset)
+    monkeypatch.setattr(server, "_get_required_user_visa_types", lambda user_id: ["h1b"])
+    server._load_company_dataset.cache_clear()
+    monkeypatch.setattr(
+        server,
+        "scrape_jobs",
+        lambda **kwargs: pd.DataFrame(
+            [
+                {
+                    "title": "Engineer 1",
+                    "company": "Acme Inc.",
+                    "location": "Austin, TX",
+                    "site": "linkedin",
+                    "description": "General role text.",
+                    "job_url": "https://example.com/1",
+                    "date_posted": "2026-02-18",
+                },
+                {
+                    "title": "Engineer 2",
+                    "company": "Acme Inc.",
+                    "location": "Austin, TX",
+                    "site": "linkedin",
+                    "description": "General role text.",
+                    "job_url": "https://example.com/2",
+                    "date_posted": "2026-02-18",
+                },
+            ]
+        ),
+    )
+
+    started = server.start_visa_job_search(
+        location="Austin, TX",
+        job_title="software engineer",
+        user_id="u1",
+        dataset_path=str(dataset),
+        results_wanted=20,
+        max_returned=10,
+    )
+    run_id = started["run_id"]
+    cursor = 0
+    terminal = ""
+    aggregated_events: list[dict[str, object]] = []
+    for _ in range(100):
+        status = server.get_visa_job_search_status(user_id="u1", run_id=run_id, cursor=cursor)
+        cursor = status["next_cursor"]
+        aggregated_events.extend(status["events"])
+        terminal = status["status"]
+        if status["is_terminal"]:
+            break
+        time.sleep(0.01)
+
+    assert terminal == "completed"
+    assert any(str(e.get("phase")) == "scan_chunk_completed" for e in aggregated_events)
+
+    results = server.get_visa_job_search_results(user_id="u1", run_id=run_id)
+    assert results["stats"]["accepted_jobs"] == 2
+    assert len(results["jobs"]) == 2
 
 
 def test_find_jobs_rejects_session_id_when_query_changes(tmp_path: Path, monkeypatch) -> None:
@@ -680,6 +765,7 @@ def test_export_and_delete_user_data(tmp_path: Path, monkeypatch) -> None:
     server.add_user_memory_line(user_id="u1", content="Strong Python", kind="skills")
     server.save_job_for_later(user_id="u1", job_url="https://example.com/save-1")
     server.ignore_job(user_id="u1", job_url="https://example.com/ignore-1")
+    server.ignore_company(user_id="u1", company_name="Acme Inc.")
     server._load_company_dataset.cache_clear()
 
     monkeypatch.setattr(
@@ -710,6 +796,7 @@ def test_export_and_delete_user_data(tmp_path: Path, monkeypatch) -> None:
     assert exported["counts"]["memory_lines"] == 1
     assert exported["counts"]["saved_jobs"] == 1
     assert exported["counts"]["ignored_jobs"] == 1
+    assert exported["counts"]["ignored_companies"] == 1
     assert exported["counts"]["search_sessions"] == 1
     assert exported["counts"]["job_management_jobs"] >= 2
     assert exported["counts"]["job_management_applications"] >= 2
@@ -720,6 +807,7 @@ def test_export_and_delete_user_data(tmp_path: Path, monkeypatch) -> None:
     assert deleted["deleted"]["memory_lines"] == 1
     assert deleted["deleted"]["saved_jobs"] == 1
     assert deleted["deleted"]["ignored_jobs"] == 1
+    assert deleted["deleted"]["ignored_companies"] == 1
     assert deleted["deleted"]["search_sessions"] == 1
     assert deleted["deleted"]["job_management_jobs"] >= 2
     assert deleted["deleted"]["job_management_applications"] >= 2
@@ -804,3 +892,41 @@ def test_related_titles_has_generic_fallback_for_uncommon_titles() -> None:
     related = server.find_related_titles(job_title="forensic lighthouse quantum architect", limit=5)
     assert related["count"] >= 1
     assert isinstance(related["related_titles"], list)
+
+
+def test_search_feedback_supports_action_loop_and_urgency_notes(tmp_path: Path, monkeypatch) -> None:
+    dataset = tmp_path / "companies.csv"
+    _write_dataset(dataset)
+    server.set_user_preferences(user_id="u1", preferred_visa_types=["h1b"])
+    server.set_user_constraints(user_id="u1", days_remaining=20, willing_to_relocate=True)
+    server._load_company_dataset.cache_clear()
+    monkeypatch.setattr(
+        server,
+        "scrape_jobs",
+        lambda **kwargs: pd.DataFrame(
+            [
+                {
+                    "title": "Software Engineer",
+                    "company": "Acme Inc.",
+                    "location": "New York, NY",
+                    "site": "linkedin",
+                    "description": "General role",
+                    "job_url": "https://example.com/feedback",
+                    "date_posted": "2026-02-18",
+                }
+            ]
+        ),
+    )
+
+    result = server.find_visa_sponsored_jobs(
+        location="New York, NY",
+        job_title="software engineer",
+        user_id="u1",
+        dataset_path=str(dataset),
+        max_returned=10,
+    )
+
+    assert result["agent_guidance"]["mark_applied_tool"] == "mark_job_applied"
+    assert "ask_user_to_mark_applied_prompt" in result["agent_guidance"]
+    assert any("High urgency profile" in note for note in result["personalization_notes"])
+    assert "High urgency support mode" in result["feedback_summary"]["user_goal_alignment"]

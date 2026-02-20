@@ -14,8 +14,10 @@ def _isolated_search_session_store(tmp_path: Path, monkeypatch) -> None:
     monkeypatch.setattr(server, "DEFAULT_DOL_MANIFEST_PATH", str(tmp_path / "pipeline_manifest.json"))
     monkeypatch.setattr(server, "DEFAULT_USER_BLOB_PATH", str(tmp_path / "user_memory_blob.json"))
     monkeypatch.setattr(server, "DEFAULT_SEARCH_SESSION_PATH", str(tmp_path / "search_sessions.json"))
+    monkeypatch.setattr(server, "DEFAULT_SEARCH_RUNS_PATH", str(tmp_path / "search_runs.json"))
     monkeypatch.setattr(server, "DEFAULT_SAVED_JOBS_PATH", str(tmp_path / "saved_jobs.json"))
     monkeypatch.setattr(server, "DEFAULT_IGNORED_JOBS_PATH", str(tmp_path / "ignored_jobs.json"))
+    monkeypatch.setattr(server, "DEFAULT_IGNORED_COMPANIES_PATH", str(tmp_path / "ignored_companies.json"))
     monkeypatch.setattr(server, "DEFAULT_JOB_DB_PATH", str(tmp_path / "job_management.db"))
 
 
@@ -262,6 +264,7 @@ def test_get_user_readiness_includes_profile_counters(tmp_path: Path, monkeypatc
     server.add_user_memory_line(user_id="u1", content="Strong Python", kind="skills")
     server.save_job_for_later(user_id="u1", job_url="https://example.com/save-1", title="SE")
     server.ignore_job(user_id="u1", job_url="https://example.com/ignore-1", reason="not relevant")
+    server.ignore_company(user_id="u1", company_name="Acme Inc.")
 
     readiness = server.get_user_readiness(user_id="u1", dataset_path=str(dataset))
 
@@ -271,5 +274,6 @@ def test_get_user_readiness_includes_profile_counters(tmp_path: Path, monkeypatc
     assert readiness["readiness"]["memory_lines_count"] == 1
     assert readiness["readiness"]["saved_jobs_count"] == 1
     assert readiness["readiness"]["ignored_jobs_count"] == 1
+    assert readiness["readiness"]["ignored_companies_count"] == 1
     assert readiness["readiness"]["job_stage_counts"]["saved"] >= 1
     assert readiness["readiness"]["job_stage_counts"]["ignored"] >= 1

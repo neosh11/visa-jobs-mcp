@@ -9,6 +9,7 @@ from visa_jobs_mcp import server
 def test_add_query_delete_user_memory_line(tmp_path: Path, monkeypatch) -> None:
     blob_path = tmp_path / "user_memory_blob.json"
     monkeypatch.setattr(server, "DEFAULT_USER_BLOB_PATH", str(blob_path))
+    monkeypatch.setattr(server, "DEFAULT_SEARCH_RUNS_PATH", str(tmp_path / "search_runs.json"))
     monkeypatch.setattr(server, "DEFAULT_JOB_DB_PATH", str(tmp_path / "job_management.db"))
 
     add1 = server.add_user_memory_line(
@@ -54,6 +55,7 @@ def test_add_query_delete_user_memory_line(tmp_path: Path, monkeypatch) -> None:
 def test_query_and_delete_missing_user_memory(tmp_path: Path, monkeypatch) -> None:
     blob_path = tmp_path / "user_memory_blob.json"
     monkeypatch.setattr(server, "DEFAULT_USER_BLOB_PATH", str(blob_path))
+    monkeypatch.setattr(server, "DEFAULT_SEARCH_RUNS_PATH", str(tmp_path / "search_runs.json"))
     monkeypatch.setattr(server, "DEFAULT_JOB_DB_PATH", str(tmp_path / "job_management.db"))
 
     queried = server.query_user_memory_blob(user_id="missing")
@@ -68,6 +70,7 @@ def test_query_and_delete_missing_user_memory(tmp_path: Path, monkeypatch) -> No
 def test_add_user_memory_line_validates_required_fields(tmp_path: Path, monkeypatch) -> None:
     blob_path = tmp_path / "user_memory_blob.json"
     monkeypatch.setattr(server, "DEFAULT_USER_BLOB_PATH", str(blob_path))
+    monkeypatch.setattr(server, "DEFAULT_SEARCH_RUNS_PATH", str(tmp_path / "search_runs.json"))
     monkeypatch.setattr(server, "DEFAULT_JOB_DB_PATH", str(tmp_path / "job_management.db"))
 
     try:

@@ -483,6 +483,182 @@ def unignore_job(user_id: str, ignored_job_id: int) -> dict[str, Any]:
 
 
 @mcp.tool()
+def ignore_company(
+    user_id: str,
+    company_name: str = "",
+    result_id: str = "",
+    session_id: str = "",
+    reason: str = "",
+    source: str = "",
+) -> dict[str, Any]:
+    """Ignore a company so future search results exclude all jobs from that employer."""
+    uid = user_id.strip()
+    if not uid:
+        raise ValueError("user_id is required")
+
+    resolved: dict[str, Any] = {}
+    clean_company_name = company_name.strip()
+    if result_id.strip() or session_id.strip():
+        resolved = _resolve_job_reference(
+            user_id=uid,
+            result_id=result_id,
+            session_id=session_id,
+        )
+        if not clean_company_name:
+            clean_company_name = str(resolved.get("company", "")).strip()
+        if not source.strip():
+            source = str(resolved.get("source_session_id", "")).strip()
+
+    if not clean_company_name:
+        raise ValueError("company_name is required (or provide result_id/session_id).")
+
+    normalized_company = normalize_company_name(clean_company_name)
+    if not normalized_company:
+        raise ValueError("company_name could not be normalized; provide a valid company name.")
+
+    data = _load_ignored_companies()
+    entry = _ensure_ignored_companies_entry(data, uid)
+    now_utc = _utcnow_iso()
+
+    for ignored in entry["companies"]:
+        if str(ignored.get("normalized_company", "")).strip() != normalized_company:
+            continue
+        ignored["company_name"] = clean_company_name
+        if reason.strip():
+            ignored["reason"] = reason.strip()
+        if source.strip():
+            ignored["source"] = source.strip()
+        ignored["updated_at_utc"] = now_utc
+        _save_ignored_companies(data)
+        return {
+            "user_id": uid,
+            "action": "updated_existing",
+            "ignored_company": ignored,
+            "resolved_result_id": str(resolved.get("result_id", "")).strip(),
+            "total_ignored_companies": len(entry["companies"]),
+            "path": DEFAULT_IGNORED_COMPANIES_PATH,
+        }
+
+    ignored_company_id = int(entry["next_id"])
+    ignored_company = {
+        "id": ignored_company_id,
+        "company_name": clean_company_name,
+        "normalized_company": normalized_company,
+        "reason": reason.strip(),
+        "source": source.strip(),
+        "ignored_at_utc": now_utc,
+        "updated_at_utc": now_utc,
+    }
+    entry["companies"].append(ignored_company)
+    entry["next_id"] = ignored_company_id + 1
+    entry["updated_at_utc"] = now_utc
+    _save_ignored_companies(data)
+    return {
+        "user_id": uid,
+        "action": "ignored_new",
+        "ignored_company": ignored_company,
+        "resolved_result_id": str(resolved.get("result_id", "")).strip(),
+        "total_ignored_companies": len(entry["companies"]),
+        "path": DEFAULT_IGNORED_COMPANIES_PATH,
+    }
+
+
+@mcp.tool()
+def list_ignored_companies(
+    user_id: str,
+    limit: int = 50,
+    offset: int = 0,
+) -> dict[str, Any]:
+    """List ignored companies for a user (latest-first)."""
+    uid = user_id.strip()
+    if not uid:
+        raise ValueError("user_id is required")
+    safe_limit = max(1, min(limit, 200))
+    safe_offset = max(offset, 0)
+
+    data = _load_ignored_companies()
+    entry = _get_ignored_companies_entry(data, uid)
+    if not entry:
+        return {
+            "user_id": uid,
+            "offset": safe_offset,
+            "limit": safe_limit,
+            "total_ignored_companies": 0,
+            "returned_companies": 0,
+            "companies": [],
+            "path": DEFAULT_IGNORED_COMPANIES_PATH,
+        }
+
+    ordered_companies = sorted(entry["companies"], key=lambda company: company["id"], reverse=True)
+    page = ordered_companies[safe_offset : safe_offset + safe_limit]
+    return {
+        "user_id": uid,
+        "offset": safe_offset,
+        "limit": safe_limit,
+        "total_ignored_companies": len(ordered_companies),
+        "returned_companies": len(page),
+        "companies": page,
+        "path": DEFAULT_IGNORED_COMPANIES_PATH,
+    }
+
+
+@mcp.tool()
+def unignore_company(user_id: str, ignored_company_id: int) -> dict[str, Any]:
+    """Remove one ignored company by id."""
+    uid = user_id.strip()
+    if not uid:
+        raise ValueError("user_id is required")
+    try:
+        target_id = int(ignored_company_id)
+    except (TypeError, ValueError) as exc:
+        raise ValueError("ignored_company_id must be an integer") from exc
+    if target_id < 1:
+        raise ValueError("ignored_company_id must be a positive integer")
+
+    data = _load_ignored_companies()
+    entry = _get_ignored_companies_entry(data, uid)
+    if not entry:
+        return {
+            "user_id": uid,
+            "ignored_company_id": target_id,
+            "deleted": False,
+            "deleted_company": None,
+            "total_ignored_companies": 0,
+            "path": DEFAULT_IGNORED_COMPANIES_PATH,
+        }
+
+    remaining: list[dict[str, Any]] = []
+    deleted_company: dict[str, Any] | None = None
+    for company in entry["companies"]:
+        if deleted_company is None and company["id"] == target_id:
+            deleted_company = company
+            continue
+        remaining.append(company)
+
+    if deleted_company is None:
+        return {
+            "user_id": uid,
+            "ignored_company_id": target_id,
+            "deleted": False,
+            "deleted_company": None,
+            "total_ignored_companies": len(entry["companies"]),
+            "path": DEFAULT_IGNORED_COMPANIES_PATH,
+        }
+
+    entry["companies"] = remaining
+    entry["updated_at_utc"] = _utcnow_iso()
+    _save_ignored_companies(data)
+    return {
+        "user_id": uid,
+        "ignored_company_id": target_id,
+        "deleted": True,
+        "deleted_company": deleted_company,
+        "total_ignored_companies": len(remaining),
+        "path": DEFAULT_IGNORED_COMPANIES_PATH,
+    }
+
+
+@mcp.tool()
 def mark_job_applied(
     user_id: str,
     job_id: int = 0,
@@ -864,5 +1040,4 @@ def clear_search_session(
         "remaining_user_sessions": int(remaining_user_sessions),
         "path": DEFAULT_SEARCH_SESSION_PATH,
     }
-
 
