@@ -27,6 +27,7 @@ Code guide for contributors and coding agents working in `visa-jobs-mcp`.
   - `src/visa_jobs_mcp/pipeline.py`
   - `src/visa_jobs_mcp/pipeline_cli.py`
   - `scripts/run_internal_pipeline.sh`
+  - `pyproject.toml` is pipeline-only (no Python MCP entrypoint scripts).
 
 ## Dependency policy
 - Prefer well-adopted and actively maintained packages.

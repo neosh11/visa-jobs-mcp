@@ -4,24 +4,19 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "visa-jobs-mcp"
-version = "0.2.9"
-description = "MCP server to discover visa-sponsoring jobs by area using JobSpy"
+version = "0.2.10"
+description = "Internal pipeline utilities for refreshing visa sponsorship datasets"
 readme = "README.md"
 license = {text = "MIT"}
 requires-python = ">=3.11"
 dependencies = [
-  "mcp>=1.12.0",
-  "python-jobspy>=1.1.82",
   "pandas>=2.2.0",
   "requests>=2.32.0",
   "openpyxl>=3.1.0"
 ]
 
 [project.scripts]
-visa-jobs-mcp = "visa_jobs_mcp.server_cli:main"
 visa-jobs-pipeline = "visa_jobs_mcp.pipeline_cli:main"
-visa-jobs-setup = "visa_jobs_mcp.setup_cli:main"
-visa-jobs-doctor = "visa_jobs_mcp.doctor_cli:main"
 
 [project.optional-dependencies]
 dev = [

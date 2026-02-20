@@ -52,6 +52,8 @@ If you need to refresh `data/companies.csv` from source, run:
 ./scripts/run_internal_pipeline.sh
 ```
 
+Note: MCP runtime is Go-only. Python is only needed for maintainers running the internal dataset pipeline.
+
 ## What It Supports
 
 - LinkedIn-only search.
