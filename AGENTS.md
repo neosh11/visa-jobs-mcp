@@ -71,6 +71,7 @@ Manual live LinkedIn E2E (networked, opt-in):
 ```bash
 ./scripts/run_live_linkedin_e2e.sh
 ```
+Supports overrides via env vars: `VISA_E2E_VISA_TYPE`, `VISA_E2E_LOCATION`, `VISA_E2E_JOB_TITLE`.
 
 Run MCP server over stdio:
 ```bash

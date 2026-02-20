@@ -5,6 +5,8 @@ package user
 import (
 	"os"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 )
@@ -69,9 +71,17 @@ func TestE2ELinkedInNYCSWEH1B(t *testing.T) {
 	}
 
 	userID := "live-e2e-user"
+	visaType := envStringOrDefault("VISA_E2E_VISA_TYPE", "H1B")
+	location := envStringOrDefault("VISA_E2E_LOCATION", "New York, NY")
+	jobTitle := envStringOrDefault("VISA_E2E_JOB_TITLE", "Software Engineer")
+	resultsWanted := envIntOrDefault("VISA_E2E_RESULTS_WANTED", 5)
+	maxReturned := envIntOrDefault("VISA_E2E_MAX_RETURNED", 5)
+	scanMultiplier := envIntOrDefault("VISA_E2E_SCAN_MULTIPLIER", 4)
+	maxScanResults := envIntOrDefault("VISA_E2E_MAX_SCAN_RESULTS", 120)
+	hoursOld := envIntOrDefault("VISA_E2E_HOURS_OLD", 336)
 	_, err = SetUserPreferences(map[string]any{
 		"user_id":              userID,
-		"preferred_visa_types": []any{"H1B"},
+		"preferred_visa_types": []any{visaType},
 	})
 	if err != nil {
 		t.Fatalf("SetUserPreferences failed: %v", err)
@@ -79,15 +89,15 @@ func TestE2ELinkedInNYCSWEH1B(t *testing.T) {
 
 	started, err := StartVisaJobSearch(map[string]any{
 		"user_id":                    userID,
-		"location":                   "New York, NY",
-		"job_title":                  "Software Engineer",
-		"results_wanted":             5,
-		"max_returned":               5,
-		"scan_multiplier":            4,
-		"max_scan_results":           120,
+		"location":                   location,
+		"job_title":                  jobTitle,
+		"results_wanted":             resultsWanted,
+		"max_returned":               maxReturned,
+		"scan_multiplier":            scanMultiplier,
+		"max_scan_results":           maxScanResults,
 		"strictness_mode":            "balanced",
 		"require_description_signal": false,
-		"hours_old":                  336,
+		"hours_old":                  hoursOld,
 		"dataset_path":               datasetPath,
 	})
 	if err != nil {
@@ -135,4 +145,27 @@ func TestE2ELinkedInNYCSWEH1B(t *testing.T) {
 	}
 
 	t.Logf("live e2e passed: run_id=%s raw_jobs_scanned=%d returned_jobs=%d", runID, intOrZero(stats["raw_jobs_scanned"]), len(jobs))
+}
+
+func envStringOrDefault(key, fallback string) string {
+	value := strings.TrimSpace(os.Getenv(key))
+	if value == "" {
+		return fallback
+	}
+	return value
+}
+
+func envIntOrDefault(key string, fallback int) int {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return fallback
+	}
+	parsed, err := strconv.Atoi(raw)
+	if err != nil {
+		return fallback
+	}
+	if parsed < 1 {
+		return fallback
+	}
+	return parsed
 }

@@ -68,6 +68,15 @@ Optional timeout override:
 VISA_E2E_TEST_TIMEOUT=8m ./scripts/run_live_linkedin_e2e.sh
 ```
 
+Optional live test parameters:
+
+```bash
+VISA_E2E_VISA_TYPE=E3 \
+VISA_E2E_LOCATION="New York, NY" \
+VISA_E2E_JOB_TITLE="Software Engineer" \
+./scripts/run_live_linkedin_e2e.sh
+```
+
 ## What It Supports
 
 - LinkedIn-only search.
